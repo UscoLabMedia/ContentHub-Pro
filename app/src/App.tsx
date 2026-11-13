@@ -4,12 +4,13 @@ import { STEPS, TOTAL } from './steps.ts';
 import { useProject } from './project.ts';
 import { EditCode } from './components/EditCode.tsx';
 import { Settings } from './components/Settings.tsx';
-import { StepAnalysis, StepDraft, StepFinal, StepProduction, StepPublish } from './components/Production.tsx';
+import { StepDeliverables } from './components/Deliverables.tsx';
+import { StepAnalysis, StepDraft, StepProduction, StepPublish } from './components/Production.tsx';
 import { SelfTest } from './components/SelfTest.tsx';
 import { StepVoice } from './components/Voice.tsx';
 import { STEP_COMPONENTS, canAdvance } from './components/Steps.tsx';
 
-const ALL_STEPS = [...STEP_COMPONENTS, StepVoice, StepProduction, StepDraft, StepFinal, StepPublish, StepAnalysis];
+const ALL_STEPS = [...STEP_COMPONENTS, StepVoice, StepProduction, StepDraft, StepDeliverables, StepPublish, StepAnalysis];
 import { Unlock } from './components/Unlock.tsx';
 
 interface Status {

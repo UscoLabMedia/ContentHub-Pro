@@ -16,6 +16,7 @@ import {
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderFile, renderStatus, startRender } from './render.ts';
 import { runSelfTest, type CheckResult } from './selftest.ts';
+import { getPackage, isPackageId, packageDir, startPackage, type PackageRequest } from './deliverables.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.APP_ORIGIN ?? 'http://localhost:5173'; // Vite dev server; same-origin in production
@@ -238,6 +239,7 @@ const server = createServer(async (req, res) => {
     // these two read-only routes accept the session token as ?s=.
     const fm = url.pathname.match(/^\/api\/render\/([a-f0-9]{16})\/file$/);
     const am = url.pathname.match(/^\/api\/audio\/([a-f0-9]{40})\.wav$/);
+    const dm = url.pathname.match(/^\/api\/deliverable\/([a-f0-9]{16})\/([a-z0-9][a-z0-9._-]{0,80})$/);
     const rm2 = url.pathname.match(/^\/api\/sources\/([a-f0-9]{16})\/audio$/);
     if (rm2 && req.method === 'GET') {
       if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
@@ -252,11 +254,20 @@ const server = createServer(async (req, res) => {
       }
       return sendBytes(req, res, buf, 'audio/mpeg');
     }
+    if (dm && req.method === 'GET') {
+      if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
+      const file = join(packageDir(DATA_DIR, dm[1]!), dm[2]!);
+      if (!existsSync(file)) return json(res, 404, { error: 'Not found' });
+      const ext = extname(file);
+      const type = ext === '.png' ? 'image/png' : ext === '.wav' ? 'audio/wav' : ext === '.srt' ? 'application/x-subrip; charset=utf-8' : 'text/plain; charset=utf-8';
+      return sendFile(req, res, file, type, url.searchParams.get('dl') ? dm[2]! : undefined);
+    }
     if ((fm || am) && req.method === 'GET') {
       if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
       const file = fm ? renderFile(DATA_DIR, fm[1]!) : tts.cacheFile(am![1]!);
       if (!existsSync(file)) return json(res, 404, { error: 'Not found' });
-      return sendFile(req, res, file, fm ? 'video/mp4' : 'audio/wav', fm && url.searchParams.get('dl') ? `contenthub-${fm[1]}.mp4` : undefined);
+      const friendly = (url.searchParams.get('name') ?? '').match(/^[a-z0-9][a-z0-9._-]{0,80}\.mp4$/)?.[0];
+      return sendFile(req, res, file, fm ? 'video/mp4' : 'audio/wav', fm && url.searchParams.get('dl') ? (friendly ?? `contenthub-${fm[1]}.mp4`) : undefined);
     }
 
     if (!session || !authed(req)) return json(res, 401, { error: 'Locked' });
@@ -297,6 +308,36 @@ const server = createServer(async (req, res) => {
       const force = (await readBody(req)).refresh === true;
       if (!radarCache || force || Date.now() - radarCache.at > 30 * 60_000) radarCache = { at: Date.now(), data: await fetchRadar({ geo: 'CO', region: 'Huila' }) };
       return json(res, 200, { ...radarCache.data, lines: radarLines(radarCache.data.items) });
+    }
+
+    // --- deliverables: the person ticks what to produce ---
+    if (url.pathname === '/api/deliverables' && req.method === 'POST') {
+      const b = await readBody(req);
+      const base = VideoSpec.safeParse({ preset: 'youtube_long', scenes: (b.scenes ?? []).map((x: { text: string; durationSec: number }) => ({ text: x.text, durationSec: x.durationSec })), theme: b.theme });
+      if (!base.success || !Array.isArray(b.items)) return json(res, 400, { error: 'Solicitud de entregables inválida' });
+      const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
+      const request: PackageRequest = {
+        items: b.items, scenes: base.data.scenes.map(({ text, durationSec }) => ({ text, durationSec })), theme: base.data.theme,
+        shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
+        title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
+        summary: String(b.summary ?? '').slice(0, 3000),
+        sources: Array.isArray(b.sources) ? b.sources.slice(0, 30).map((x: { source: string; url?: string; metric?: string }) => ({ source: String(x.source).slice(0, 120), url: x.url ? String(x.url).slice(0, 300) : undefined, metric: x.metric ? String(x.metric).slice(0, 60) : undefined })) : [],
+        hashtags: Array.isArray(b.hashtags) ? b.hashtags.slice(0, 20).map((h: unknown) => String(h).slice(0, 40)) : [],
+        extra: Array.isArray(b.extra) ? b.extra.slice(0, 10).map((h: unknown) => String(h).slice(0, 300)) : undefined,
+      };
+      try {
+        return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: voice ? {
+          tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
+          audioUrl: (hash) => `http://127.0.0.1:${PORT}/api/audio/${hash}.wav?s=${s.token}`,
+        } : undefined }));
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudieron iniciar los entregables' });
+      }
+    }
+    const pm = url.pathname.match(/^\/api\/deliverables\/([a-f0-9]{16})$/);
+    if (pm && req.method === 'GET') {
+      const j = isPackageId(pm[1]!) ? getPackage(pm[1]!) : null;
+      return j ? json(res, 200, j) : json(res, 404, { error: 'Not found' });
     }
 
     // --- video rendering (local, zero tokens) ---

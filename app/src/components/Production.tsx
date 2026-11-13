@@ -132,7 +132,7 @@ export function StepProduction({ project, set }: P) {
 }
 
 // ------------------------------------------------------------------ steps 7 & 8
-function RenderStep({ n, quality, project, set }: P & { n: 8 | 9; quality: 'draft' | 'final' }) {
+function RenderStep({ n, quality, project, set }: P & { n: 8; quality: 'draft' | 'final' }) {
   const key = specKey(project);
   const ref = quality === 'draft' ? project.renders.draft : project.renders.final;
   const fresh = ref?.spec === key;
@@ -171,7 +171,6 @@ function RenderStep({ n, quality, project, set }: P & { n: 8 | 9; quality: 'draf
   );
 }
 export const StepDraft = (p: P) => <RenderStep {...p} n={8} quality="draft" />;
-export const StepFinal = (p: P) => <RenderStep {...p} n={9} quality="final" />;
 
 // ------------------------------------------------------------------ step 9
 const UPLOAD_PAGE: Record<string, string> = {
@@ -188,7 +187,7 @@ const lineAfter = (text: string, label: string) => text.split('\n').find((l) => 
 export function StepPublish({ project, set }: P) {
   const t = useTask<z.infer<typeof PublishCopyOut>>('publishCopy');
   const [urls, setUrls] = useState<Record<string, string>>({});
-  const final = project.renders.final;
+  const longFile = project.deliverables.result?.items.find((i) => i.id === 'long')?.files[0];
   const posted = project.publish.posted;
   const copy = (txt: string) => void navigator.clipboard.writeText(txt);
   const items = t.state.status === 'ok' ? t.state.data.items : project.publish.copy;
@@ -200,7 +199,7 @@ export function StepPublish({ project, set }: P) {
         <button className={primary} disabled={t.state.status === 'loading'} onClick={() => void t.run({ topic: project.topic, platforms: project.platforms, hook: lineAfter(project.script.text, 'GANCHO:'), caption: lineAfter(project.script.text, 'CAPTION:') })}>
           Generar textos de publicación
         </button>
-        {final && <a className={`${secondary} inline-block`} href={videoUrl(final.id, true)} download>Descargar video final</a>}
+        {longFile && <a className={`${secondary} inline-block`} href={`${longFile.url}&s=${getToken()}`} download>Descargar video largo</a>}
       </div>
       <Status s={t.state} />
       {t.state.status === 'ok' && (

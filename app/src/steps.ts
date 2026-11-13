@@ -8,7 +8,7 @@ export const STEPS = [
   { id: 6, title: 'Voz' },
   { id: 7, title: 'Producción' },
   { id: 8, title: 'Borrador (540p)' },
-  { id: 9, title: 'Render final 1080p' },
+  { id: 9, title: 'Entregables' },
   { id: 10, title: 'Publicación' },
   { id: 11, title: 'Análisis de resultados' },
 ] as const;
