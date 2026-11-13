@@ -1,4 +1,10 @@
 node_modules/
-.env
-.DS_Store
 dist/
+out/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+*.enc
+.contenthub-data/
+.DS_Store
