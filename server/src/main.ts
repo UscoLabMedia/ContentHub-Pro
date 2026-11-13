@@ -10,11 +10,12 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Vault, VideoSpec, claudeCodeStatus, createClaudeCodeClient, createLlmClient, digestToPrompt, excerpt, ingestFile,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, createClaudeCodeClient, createLlmClient, digestToPrompt, excerpt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { classify, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderFile, renderStatus, startRender } from './render.ts';
+import { runSelfTest, type CheckResult } from './selftest.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.APP_ORIGIN ?? 'http://localhost:5173'; // Vite dev server; same-origin in production
@@ -24,6 +25,21 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const DIST = join(ROOT, 'app', 'dist');
 const MIN_PASSWORD = 8;
 const MAX_UPLOAD = 4 * 1024 ** 3;
+
+const tts = new Tts(DATA_DIR, process.env.CHP_PIPER_BIN);
+let radarCache: { at: number; data: Awaited<ReturnType<typeof fetchRadar>> } | null = null;
+
+interface VoiceJob {
+  id: string;
+  status: 'working' | 'done' | 'error';
+  progress: number;
+  label: string;
+  error?: string;
+  hash?: string;
+  durationSec?: number;
+}
+const voiceJobs = new Map<string, VoiceJob>();
+const selftest: { running: boolean; full: boolean; results: CheckResult[] } = { running: false, full: false, results: [] };
 
 type Engine = 'claude-code' | 'api';
 interface Session {
@@ -135,6 +151,25 @@ function repoName(): string | null {
   return r.status === 0 ? (r.stdout.trim().match(/github\.com[:/](.+?)(?:\.git)?$/)?.[1] ?? null) : null;
 }
 
+/** Serves a file with HTTP Range support (needed for seeking in <video>/<audio>). */
+async function sendFile(req: IncomingMessage, res: ServerResponse, file: string, type: string, download?: string): Promise<void> {
+  const size = (await stat(file)).size;
+  const head: Record<string, string | number> = { 'content-type': type, 'accept-ranges': 'bytes' };
+  if (download) head['content-disposition'] = `attachment; filename="${download}"`;
+  const range = String(req.headers.range ?? '').match(/^bytes=(\d*)-(\d*)$/);
+  if (range && (range[1] || range[2])) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+    if (start > end || start >= size) return void res.writeHead(416, { 'content-range': `bytes */${size}` }).end();
+    res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1 });
+    return void createReadStream(file, { start, end }).pipe(res);
+  }
+  res.writeHead(200, { ...head, 'content-length': size });
+  createReadStream(file).pipe(res);
+}
+
+const tokenOk = (t: string): boolean => !!session && t.length === session.token.length && timingSafeEqual(Buffer.from(t), Buffer.from(session.token));
+
 const server = createServer(async (req, res) => {
   res.setHeader('access-control-allow-origin', ORIGIN);
   res.setHeader('access-control-allow-headers', 'content-type,x-session');
@@ -181,38 +216,70 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    // Rendered videos are played by <video>, which can't send headers: accept the session token as ?s= here only.
+    // Videos/audio are played by <video>/<audio> (and fetched by the render browser), which can't send headers:
+    // these two read-only routes accept the session token as ?s=.
     const fm = url.pathname.match(/^\/api\/render\/([a-f0-9]{16})\/file$/);
-    if (fm && req.method === 'GET') {
-      const t = String(url.searchParams.get('s') ?? '');
-      if (!session || t.length !== session.token.length || !timingSafeEqual(Buffer.from(t), Buffer.from(session.token))) return json(res, 401, { error: 'Locked' });
-      const file = renderFile(DATA_DIR, fm[1]!);
+    const am = url.pathname.match(/^\/api\/audio\/([a-f0-9]{40})\.wav$/);
+    if ((fm || am) && req.method === 'GET') {
+      if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
+      const file = fm ? renderFile(DATA_DIR, fm[1]!) : tts.cacheFile(am![1]!);
       if (!existsSync(file)) return json(res, 404, { error: 'Not found' });
-      const size = (await stat(file)).size;
-      const head: Record<string, string | number> = { 'content-type': 'video/mp4', 'accept-ranges': 'bytes' };
-      if (url.searchParams.get('dl')) head['content-disposition'] = `attachment; filename="contenthub-${fm[1]}.mp4"`;
-      const range = String(req.headers.range ?? '').match(/^bytes=(\d*)-(\d*)$/);
-      if (range && (range[1] || range[2])) {
-        const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
-        const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
-        if (start > end || start >= size) return void res.writeHead(416, { 'content-range': `bytes */${size}` }).end();
-        res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1 });
-        return void createReadStream(file, { start, end }).pipe(res);
-      }
-      res.writeHead(200, { ...head, 'content-length': size });
-      return void createReadStream(file).pipe(res);
+      return sendFile(req, res, file, fm ? 'video/mp4' : 'audio/wav', fm && url.searchParams.get('dl') ? `contenthub-${fm[1]}.mp4` : undefined);
     }
 
     if (!session || !authed(req)) return json(res, 401, { error: 'Locked' });
     const s = session;
+
+    // --- self-test: real checks of every capability on this computer ---
+    if (url.pathname === '/api/selftest' && req.method === 'GET') return json(res, 200, selftest);
+    if (url.pathname === '/api/selftest' && req.method === 'POST') {
+      if (selftest.running) return json(res, 409, { error: 'Ya hay una prueba en curso' });
+      const full = (await readBody(req)).full === true;
+      Object.assign(selftest, { running: true, full, results: [] });
+      runSelfTest({ dataDir: DATA_DIR, root: ROOT, full, tts, onUpdate: (r) => (selftest.results = r) })
+        .then((r) => (selftest.results = r))
+        .catch(() => {})
+        .finally(() => (selftest.running = false));
+      return json(res, 200, selftest);
+    }
+
+    // --- voices (free, local): list, audition, narrate ---
+    if (url.pathname === '/api/voices' && req.method === 'GET') return json(res, 200, { voices: await tts.list() });
+    if (url.pathname === '/api/voice/synth' && req.method === 'POST') {
+      const b = await readBody(req);
+      const text = String(b.text ?? '').slice(0, 800);
+      if (!text.trim() || typeof b.voiceId !== 'string') return json(res, 400, { error: 'Falta la voz o el texto' });
+      if ([...voiceJobs.values()].some((j) => j.status === 'working')) return json(res, 409, { error: 'Ya se está generando una voz; espera un momento' });
+      const job: VoiceJob = { id: randomBytes(8).toString('hex'), status: 'working', progress: 1, label: 'En cola' };
+      voiceJobs.set(job.id, job);
+      tts.synth(b.voiceId, text, Number(b.speed) || 1, (p, l) => Object.assign(job, { progress: p, label: l }))
+        .then((n) => Object.assign(job, { status: 'done', progress: 100, hash: n.hash, durationSec: n.durationSec }))
+        .catch((e: unknown) => Object.assign(job, { status: 'error', error: e instanceof Error ? e.message : String(e) }));
+      return json(res, 200, job);
+    }
+    const vm = url.pathname.match(/^\/api\/voice\/([a-f0-9]{16})$/);
+    if (vm && req.method === 'GET') return voiceJobs.has(vm[1]!) ? json(res, 200, voiceJobs.get(vm[1]!)) : json(res, 404, { error: 'Not found' });
+
+    // --- topic radar: real public data, every item with its source ---
+    if (url.pathname === '/api/radar' && req.method === 'POST') {
+      const force = (await readBody(req)).refresh === true;
+      if (!radarCache || force || Date.now() - radarCache.at > 30 * 60_000) radarCache = { at: Date.now(), data: await fetchRadar({ geo: 'CO', region: 'Huila' }) };
+      return json(res, 200, { ...radarCache.data, lines: radarLines(radarCache.data.items) });
+    }
 
     // --- video rendering (local, zero tokens) ---
     if (url.pathname === '/api/render' && req.method === 'POST') {
       const b = await readBody(req);
       const spec = VideoSpec.safeParse(b.spec);
       if (!spec.success || (b.quality !== 'draft' && b.quality !== 'final')) return json(res, 400, { error: 'Especificación de video inválida' });
+      // The client never supplies audio URLs; the server adds them itself when narration is requested.
+      const clean = { ...spec.data, scenes: spec.data.scenes.map(({ text, durationSec }) => ({ text, durationSec })) };
+      const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
-        return json(res, 200, await startRender(spec.data, b.quality, DATA_DIR, ROOT));
+        return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, voice ? {
+          tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
+          audioUrl: (hash) => `http://127.0.0.1:${PORT}/api/audio/${hash}.wav?s=${s.token}`,
+        } : undefined));
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo iniciar el render' });
       }

@@ -1,14 +1,15 @@
-import { AbsoluteFill, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { VideoSpec } from '@chp/core/schemas';
 
 const DEFAULT_THEME = { bg: '#0f172a', fg: '#f8fafc', accent: '#6366f1' };
 
-const Scene = ({ text, theme }: { text: string; theme: typeof DEFAULT_THEME }) => {
+const Scene = ({ text, theme, audioUrl }: { text: string; theme: typeof DEFAULT_THEME; audioUrl?: string }) => {
   const frame = useCurrentFrame();
   const { fps, width } = useVideoConfig();
   const enter = interpolate(frame, [0, 0.4 * fps], [0, 1], { extrapolateRight: 'clamp' });
   return (
     <AbsoluteFill style={{ background: theme.bg, justifyContent: 'center', padding: width * 0.08 }}>
+      {audioUrl && <Audio src={audioUrl} />}
       <div style={{ width: width * 0.12, height: 8, background: theme.accent, marginBottom: 40, opacity: enter }} />
       <div
         style={{
@@ -37,7 +38,7 @@ export const Piece = ({ scenes, theme }: VideoSpec) => {
         const dur = Math.max(1, Math.round(s.durationSec * fps));
         const el = (
           <Sequence key={i} from={from} durationInFrames={dur}>
-            <Scene text={s.text} theme={t} />
+            <Scene text={s.text} theme={t} audioUrl={s.audioUrl} />
           </Sequence>
         );
         from += dur;

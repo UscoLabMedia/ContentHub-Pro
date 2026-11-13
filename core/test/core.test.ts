@@ -61,7 +61,7 @@ describe('gateway', () => {
     });
     return gw;
   };
-  const good = { parsed: { trends: [{ title: 'a', context: 'b', virality: 9 }] }, usage: { input_tokens: 1000, output_tokens: 200 }, stopReason: 'end_turn' };
+  const good = { parsed: { trends: [{ title: 'a', context: 'b', virality: 9, sourceIds: [1] }] }, usage: { input_tokens: 1000, output_tokens: 200 }, stopReason: 'end_turn' };
 
   it('serves repeated requests from the encrypted cache', async () => {
     const complete = vi.fn(async () => good);

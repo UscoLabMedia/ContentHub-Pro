@@ -21,7 +21,8 @@
     "check": "node scripts/check-rules.mjs",
     "verify": "npm run check && npm run typecheck && npm run test",
     "start": "node scripts/start.mjs",
-    "dev:all": "node scripts/dev.mjs"
+    "dev:all": "node scripts/dev.mjs",
+    "selftest": "node node_modules/tsx/dist/cli.mjs server/src/selftest-cli.ts"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

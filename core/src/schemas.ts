@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // Compact JSON contracts for every AI step. Short outputs = fewer tokens.
 export const TrendsOut = z.object({
-  trends: z.array(z.object({ title: z.string(), context: z.string(), virality: z.number() })),
+  trends: z.array(z.object({ title: z.string(), context: z.string(), virality: z.number(), sourceIds: z.array(z.number()) })),
 });
 
 export const TreatmentOut = z.object({
@@ -81,7 +81,7 @@ export type PublishCopy = z.infer<typeof PublishCopyOut>['items'][number];
 /** Input of the Remotion template; built locally from a script (zero tokens). */
 export const VideoSpec = z.object({
   preset: z.string(),
-  scenes: z.array(z.object({ text: z.string(), durationSec: z.number() })),
+  scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional() })),
   theme: z.object({ bg: z.string(), fg: z.string(), accent: z.string() }).optional(),
 });
 export type VideoSpec = z.infer<typeof VideoSpec>;
