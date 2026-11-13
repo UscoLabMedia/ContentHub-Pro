@@ -5,6 +5,7 @@ import { api } from '../api.ts';
 import { useTask } from '../ai.ts';
 import { Radar } from './Radar.tsx';
 import { Sources } from './Sources.tsx';
+import { gate } from '@chp/core/verification';
 import { specKey, type Project } from '../project.ts';
 
 import { PLATFORMS, Head, Status, card, field, platformIds, primary, type P } from './ui.tsx';
@@ -168,7 +169,7 @@ export const canAdvance = (step: number, p: Project): boolean => {
     p.platforms.length > 0,
     !!p.script.text.trim(),
     p.voice.mode === 'silent' || (p.voice.mode === 'narrate' && !!p.voice.voiceId),
-    p.production.scenes.length > 0,
+    p.production.scenes.length > 0 && gate(p.production.scenes, p.verification).ok,
     p.renders.draftApproved && p.renders.draft?.spec === key,
     p.deliverables.result?.key === key && p.deliverables.result.items.some((i) => i.status === 'done'),
     p.publish.posted.length > 0,

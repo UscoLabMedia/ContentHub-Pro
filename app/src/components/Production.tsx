@@ -5,7 +5,8 @@ import { THEMES, scriptToScenes, toSpec, totalDuration } from '@chp/core/product
 import type { MetricsAnalysisOut, PublishCopyOut } from '@chp/core/schemas';
 import { api, getToken } from '../api.ts';
 import { useTask } from '../ai.ts';
-import { presetOf, specKey, voiceOf, type Project } from '../project.ts';
+import { flushProject, presetOf, specKey, voiceOf, type Project } from '../project.ts';
+import { Verification } from './Verification.tsx';
 import { Head, PLATFORMS, Status, card, field, primary, type P } from './ui.tsx';
 
 const secondary = 'rounded-lg border border-slate-700 px-3 py-2 text-xs hover:bg-slate-800 disabled:opacity-40';
@@ -41,6 +42,7 @@ function useRender(onDone: (id: string) => void) {
   const start = async (project: Project, quality: 'draft' | 'final') => {
     setErr('');
     try {
+      await flushProject(); // the server checks sources against the saved project
       setJob(await api<Job>('/api/render', { method: 'POST', json: { spec: toSpec(presetOf(project), project.production.scenes, project.production.themeIdx), quality, voice: voiceOf(project) } }));
     } catch (e) {
       setErr((e as Error).message);
@@ -127,6 +129,7 @@ export function StepProduction({ project, set }: P) {
           <button key={t.name} aria-pressed={prod.themeIdx === i} onClick={() => setProd({ themeIdx: i })} className={`rounded-xl border px-4 py-2 text-xs ${prod.themeIdx === i ? 'border-indigo-500' : 'border-slate-800'}`} style={{ background: t.bg, color: t.fg }}>{t.name}</button>
         ))}
       </div>
+      <Verification project={project} set={set} />
     </div>
   );
 }

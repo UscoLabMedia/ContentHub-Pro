@@ -50,6 +50,12 @@ export async function narrateScenes(input: VideoSpec, narration: Narration, onPr
   const scenes: VideoSpec['scenes'] = [];
   const clips: NarratedScenes['clips'] = [];
   for (const [i, sc] of input.scenes.entries()) {
+    if (sc.card) {
+      scenes.push(sc); // closing sources card: no narration
+      clips.push({ file: '', durationSec: sc.durationSec });
+      onProgress?.((i + 1) / input.scenes.length);
+      continue;
+    }
     const n = await narration.tts.synth(narration.voiceId, sc.text, narration.speed);
     const durationSec = Math.max(sc.durationSec, Math.ceil((n.durationSec + 0.5) * 10) / 10);
     scenes.push({ ...sc, audioUrl: narration.audioUrl(n.hash), durationSec });

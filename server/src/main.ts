@@ -10,12 +10,14 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, creditCardText, creditsFrom, gate, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderFile, renderStatus, startRender } from './render.ts';
 import { runSelfTest, type CheckResult } from './selftest.ts';
+import { researchScenes } from './research.ts';
+import { checkMany } from './verify.ts';
 import { getPackage, isPackageId, packageDir, startPackage, type PackageRequest } from './deliverables.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -40,6 +42,18 @@ interface VoiceJob {
   durationSec?: number;
 }
 const voiceJobs = new Map<string, VoiceJob>();
+interface VerifyJob {
+  id: string;
+  status: 'working' | 'done' | 'error';
+  progress: number;
+  label: string;
+  error?: string;
+  checks?: SceneCheck[];
+}
+const verifyJobs = new Map<string, VerifyJob>();
+/** Verification checks the person has saved in the project (keyed by scene text). */
+const projectChecks = (s: { vault: Vault }): Record<string, SceneCheck> => s.vault.get<{ verification?: Record<string, SceneCheck> }>('project')?.verification ?? {};
+const pendingMessage = (n: number) => `Hay ${n} escena(s) sin verificar. Verifica sus fuentes o márcalas como opinión en el paso de producción.`;
 const selftest: { running: boolean; full: boolean; results: CheckResult[] } = { running: false, full: false, results: [] };
 
 type Engine = 'claude-code' | 'api';
@@ -310,13 +324,40 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ...radarCache.data, lines: radarLines(radarCache.data.items) });
     }
 
+    // --- source verification (documentary mode) ---
+    if (url.pathname === '/api/verify/check' && req.method === 'POST') {
+      const b = await readBody(req);
+      const items = (Array.isArray(b.items) ? b.items : []).slice(0, 20).map((x: { url: string; claim: string; quote?: string }) => ({ url: String(x.url).slice(0, 500), claim: String(x.claim).slice(0, 600), quote: x.quote ? String(x.quote).slice(0, 600) : undefined }));
+      return json(res, 200, { results: await checkMany(items) });
+    }
+    if (url.pathname === '/api/verify/research' && req.method === 'POST') {
+      const b = await readBody(req);
+      const scenes = Array.isArray(b.scenes) ? b.scenes.slice(0, 80).map((x: { text: string }) => ({ text: String(x.text).slice(0, 600) })).filter((x: { text: string }) => x.text.trim()) : [];
+      if (!scenes.length) return json(res, 400, { error: 'No hay escenas para verificar' });
+      if (!s.gateway) return json(res, 409, { error: 'Elige un motor de IA en Ajustes (la búsqueda web necesita «Mi cuenta de Claude Code»)' });
+      if ([...verifyJobs.values()].some((j) => j.status === 'working')) return json(res, 409, { error: 'Ya se están buscando fuentes; espera a que termine' });
+      const job: VerifyJob = { id: randomBytes(8).toString('hex'), status: 'working', progress: 1, label: 'Empezando' };
+      verifyJobs.set(job.id, job);
+      researchScenes(s.gateway, scenes, (p, l) => Object.assign(job, { progress: p, label: l }))
+        .then((checks) => Object.assign(job, { status: 'done', progress: 100, checks }))
+        .catch((e: unknown) => Object.assign(job, { status: 'error', error: e instanceof Error ? e.message : String(e) }));
+      return json(res, 200, job);
+    }
+    const vj = url.pathname.match(/^\/api\/verify\/([a-f0-9]{16})$/);
+    if (vj && req.method === 'GET') return verifyJobs.has(vj[1]!) ? json(res, 200, verifyJobs.get(vj[1]!)) : json(res, 404, { error: 'Not found' });
+
     // --- deliverables: the person ticks what to produce ---
     if (url.pathname === '/api/deliverables' && req.method === 'POST') {
       const b = await readBody(req);
       const base = VideoSpec.safeParse({ preset: 'youtube_long', scenes: (b.scenes ?? []).map((x: { text: string; durationSec: number }) => ({ text: x.text, durationSec: x.durationSec })), theme: b.theme });
       if (!base.success || !Array.isArray(b.items)) return json(res, 400, { error: 'Solicitud de entregables inválida' });
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
+      const baseScenes = base.data.scenes.map(({ text, durationSec }) => ({ text, durationSec }));
+      const g = gate(baseScenes, projectChecks(s));
+      if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
+      const credits = creditsFrom(baseScenes, projectChecks(s));
       const request: PackageRequest = {
+        card: credits.sources.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
         items: b.items, scenes: base.data.scenes.map(({ text, durationSec }) => ({ text, durationSec })), theme: base.data.theme,
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
@@ -325,6 +366,8 @@ const server = createServer(async (req, res) => {
         hashtags: Array.isArray(b.hashtags) ? b.hashtags.slice(0, 20).map((h: unknown) => String(h).slice(0, 40)) : [],
         extra: Array.isArray(b.extra) ? b.extra.slice(0, 10).map((h: unknown) => String(h).slice(0, 300)) : undefined,
       };
+      request.sources = [...request.sources, ...credits.sources.map((x) => ({ source: x.title, url: x.url }))];
+      if (credits.calcs.length) request.extra = [...(request.extra ?? []), 'Cálculos propios:', ...credits.calcs.map((c) => `- ${c}`)];
       try {
         return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: voice ? {
           tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
@@ -346,7 +389,11 @@ const server = createServer(async (req, res) => {
       const spec = VideoSpec.safeParse(b.spec);
       if (!spec.success || (b.quality !== 'draft' && b.quality !== 'final')) return json(res, 400, { error: 'Especificación de video inválida' });
       // The client never supplies audio URLs; the server adds them itself when narration is requested.
-      const clean = { ...spec.data, scenes: spec.data.scenes.map(({ text, durationSec }) => ({ text, durationSec })) };
+      const baseScenes = spec.data.scenes.map(({ text, durationSec }) => ({ text, durationSec }));
+      const g = gate(baseScenes, projectChecks(s));
+      if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
+      const credits = creditsFrom(baseScenes, projectChecks(s));
+      const clean = { ...spec.data, scenes: credits.sources.length ? [...baseScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : baseScenes };
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
         return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, voice ? {

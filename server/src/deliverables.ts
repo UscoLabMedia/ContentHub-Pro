@@ -20,6 +20,8 @@ export interface PackageRequest {
   hashtags: string[];
   /** Plain-text lines appended to the description (credits, notices). */
   extra?: string[];
+  /** Closing "Fuentes" card appended to every video. */
+  card?: { text: string; durationSec: number };
 }
 
 export interface PackageFile {
@@ -90,7 +92,9 @@ export async function startPackage(req: PackageRequest, o: { dataDir: string; ro
 async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: string; root: string; narration?: Narration }, dir: string): Promise<void> {
   const base = slug(req.title);
   const theme = req.theme ?? THEME;
-  const longSpec: VideoSpec = { preset: 'youtube_long', scenes: req.scenes, theme };
+  const withCard = (scenes: Scene[]): VideoSpec['scenes'] => (req.card ? [...scenes, { ...req.card, card: true }] : scenes);
+  const longSpec: VideoSpec = { preset: 'youtube_long', scenes: withCard(req.scenes), theme };
+  const spoken = (scenes: VideoSpec['scenes']) => scenes.filter((x) => !x.card);
   // The final timeline (scene lengths stretched to fit the narration) drives subtitles, chapters and the voice file.
   let resolved: Awaited<ReturnType<typeof narrateScenes>> | null = null;
   const timeline = async () => (resolved ??= o.narration ? await narrateScenes(longSpec, o.narration) : { spec: longSpec, clips: [] });
@@ -110,7 +114,7 @@ async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: strin
       if (item.id === 'long') await video(item, longSpec, `${base}-largo-16x9.mp4`, [0, 100]);
       if (item.id === 'shorts') {
         for (const [i, r] of req.shorts.entries()) {
-          await video(item, { preset: 'youtube_short', scenes: req.scenes.slice(r.from, r.to + 1), theme }, `${base}-short-${i + 1}.mp4`, [(i / req.shorts.length) * 100, ((i + 1) / req.shorts.length) * 100]);
+          await video(item, { preset: 'youtube_short', scenes: withCard(req.scenes.slice(r.from, r.to + 1)), theme }, `${base}-short-${i + 1}.mp4`, [(i / req.shorts.length) * 100, ((i + 1) / req.shorts.length) * 100]);
         }
       }
       if (item.id === 'thumbnail') {
@@ -120,13 +124,13 @@ async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: strin
       }
       if (item.id === 'description') {
         const t = await timeline();
-        await textFile(item, `${base}-descripcion.md`, buildDescription({ title: req.title, summary: req.summary, chapters: chaptersFrom(t.spec.scenes), sources: req.sources, hashtags: req.hashtags, extra: req.extra }), 'text');
+        await textFile(item, `${base}-descripcion.md`, buildDescription({ title: req.title, summary: req.summary, chapters: chaptersFrom(spoken(t.spec.scenes)), sources: req.sources, hashtags: req.hashtags, extra: req.extra }), 'text');
       }
-      if (item.id === 'subtitles') await textFile(item, `${base}-subtitulos.srt`, scenesToSrt((await timeline()).spec.scenes), 'text');
+      if (item.id === 'subtitles') await textFile(item, `${base}-subtitulos.srt`, scenesToSrt(spoken((await timeline()).spec.scenes)), 'text');
       if (item.id === 'voice') {
         const t = await timeline();
         const name = `${base}-voz.wav`;
-        await voiceWav(t.clips, join(dir, name));
+        await voiceWav(t.clips.filter((c) => c.file), join(dir, name)); // the silent sources card at the end is left out
         item.files.push({ name, url: `/api/deliverable/${job.id}/${name}?dl=1`, kind: 'audio' });
       }
       item.status = 'done';

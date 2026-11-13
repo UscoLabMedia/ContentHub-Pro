@@ -2,13 +2,15 @@
 export type ModelId = 'claude-haiku-5-5' | 'claude-sonnet-5-5' | 'claude-opus-5-5';
 export type Task =
   | 'trends' | 'treatment' | 'audience' | 'formats' | 'script' | 'metricsAnalysis'
-  | 'sourceHighlights' | 'contentIdeas' | 'publishCopy';
+  | 'sourceHighlights' | 'contentIdeas' | 'publishCopy' | 'verifyClaims';
 export type Effort = 'low' | 'medium' | 'high';
 
 export interface Route {
   model: ModelId;
   effort: Effort;
   maxTokens: number;
+  /** The model may search and open web pages (only with the Claude Code engine). */
+  research?: boolean;
 }
 
 export const ROUTES: Record<Task, Route> = {
@@ -22,6 +24,7 @@ export const ROUTES: Record<Task, Route> = {
   sourceHighlights: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 1500 },
   contentIdeas: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 3000 },
   publishCopy: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 1400 },
+  verifyClaims: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 6000, research: true },
 };
 
 export interface Usage {

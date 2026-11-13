@@ -78,10 +78,26 @@ export const PublishCopyOut = z.object({
 });
 export type PublishCopy = z.infer<typeof PublishCopyOut>['items'][number];
 
+export const VerifyOut = z.object({
+  scenes: z.array(
+    z.object({
+      key: z.string(),
+      opinion: z.boolean(),
+      claims: z.array(
+        z.object({
+          claim: z.string(),
+          calc: z.string(),
+          sources: z.array(z.object({ title: z.string(), url: z.string(), quote: z.string() })),
+        }),
+      ),
+    }),
+  ),
+});
+
 /** Input of the Remotion template; built locally from a script (zero tokens). */
 export const VideoSpec = z.object({
   preset: z.string(),
-  scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional() })),
+  scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional(), card: z.boolean().optional() })),
   theme: z.object({ bg: z.string(), fg: z.string(), accent: z.string() }).optional(),
 });
 export type VideoSpec = z.infer<typeof VideoSpec>;
@@ -97,4 +113,5 @@ export const OUTPUT_SCHEMAS = {
   sourceHighlights: HighlightsOut,
   contentIdeas: SourceIdeasOut,
   publishCopy: PublishCopyOut,
+  verifyClaims: VerifyOut,
 } as const;

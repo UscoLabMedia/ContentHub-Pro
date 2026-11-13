@@ -10,6 +10,7 @@ import {
   run, runFfmpeg, toWav16k, transcribe, wavInfo, type BlobStorage, type Tts,
 } from '@chp/core';
 import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
+import { checkSource } from './verify.ts';
 
 export type Status = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skip';
 export interface CheckResult {
@@ -99,6 +100,12 @@ export const CHECKS: Check[] = [
     return line;
   } },
 
+  { id: 'sources', label: 'Verificación de fuentes (abrir y leer páginas)', group: 'Datos', run: async () => {
+    const r = await checkSource({ url: 'https://es.wikipedia.org/wiki/Sistema_de_posicionamiento_global', claim: 'El GPS usa satélites en órbita' });
+    if (r.check === 'unreachable') throw new Error(`No pude abrir una página pública (${r.error}). Sin esto, las fuentes quedan pendientes y deberás confirmarlas tú`);
+    if (r.check === 'not-found') throw new Warn('Abrió la página pero no encontró el dato de prueba');
+    return 'Abre páginas públicas y encuentra el dato (la IA además busca en la web con Claude Code)';
+  } },
   { id: 'ffmpeg', label: 'Audio/video: ffmpeg (incluido en Remotion)', group: 'Video', run: async (c) => {
     const dir = await mkdtemp(join(tmpdir(), 'chp-ff-'));
     try {

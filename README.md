@@ -42,6 +42,18 @@ Paso 1 → pestaña **«Desde mis archivos»**: sube un podcast, audio, video, t
 
 Si cambias escenas, estilo o voz, el video queda marcado como desactualizado y hay que generarlo de nuevo. Pendiente: carruseles de imágenes, música de fondo y publicación automática (cada plataforma exige tu propia sesión y credenciales de desarrollador).
 
+## Verificación de fuentes (modo documental)
+
+En el paso de producción, cada escena con datos necesita **fuentes comprobadas**:
+
+1. **«Buscar fuentes con IA»:** Claude Code busca en la web fuentes para las afirmaciones de cada escena (necesita el motor «Mi cuenta de Claude Code»; consume consultas de tu plan).
+2. **Comprobación local:** la app abre **cada enlace** y busca la cifra o la frase en la página (sin gastar IA). Si no aparece o la página no abre, la escena queda **pendiente**. Nada de lo que diga la IA se da por bueno sin esto.
+3. **Tú decides:** puedes añadir tus propias fuentes (con cita), confirmar una fuente que revisaste tú, o marcar una escena como «opinión / sin datos».
+4. **Puerta:** mientras haya escenas pendientes no se puede pasar al borrador ni generar entregables.
+5. Las fuentes verificadas salen en la **descripción** y en una **tarjeta «Fuentes»** de 6 s al final de cada video; tus cálculos propios se anotan.
+
+Los enlaces solo se abren si son públicos: se bloquean direcciones locales y privadas.
+
 ## Entregables que se marcan (paso 9)
 
 | Entregable | Qué sale |
