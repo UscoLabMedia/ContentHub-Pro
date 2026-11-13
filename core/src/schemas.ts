@@ -94,6 +94,23 @@ export const VerifyOut = z.object({
   ),
 });
 
+const SubAnimEnum = z.enum(['pop', 'slideUp', 'bounce', 'fade', 'typewriter', 'zoom', 'shake', 'wipe']);
+export const SubtitleSheetOut = z.object({
+  category: z.enum(['condensed', 'sans', 'heavy', 'rounded', 'comic', 'handwritten', 'serif']),
+  uppercase: z.boolean(),
+  outline: z.boolean(),
+  shadow: z.boolean(),
+  highlight: z.enum(['box', 'color', 'underline', 'none']),
+  animation: SubAnimEnum,
+  similar: z.array(SubAnimEnum).max(4),
+  notes: z.string().max(160),
+});
+export const SubtitleStyleSchema = z.object({
+  font: z.string(), uppercase: z.boolean(), color: z.string(), stroke: z.object({ color: z.string(), width: z.number() }), shadow: z.boolean(),
+  highlight: z.object({ mode: z.enum(['box', 'color', 'underline', 'none']), color: z.string(), textColor: z.string() }),
+  animation: SubAnimEnum, rotate: z.array(SubAnimEnum), position: z.enum(['top', 'center', 'bottom']), size: z.number(), wordsPerGroup: z.number(),
+});
+
 export const StyleSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -105,6 +122,7 @@ export const StyleSchema = z.object({
   particles: z.boolean(),
   cameraPattern: z.array(z.enum(['zoomIn', 'zoomOut', 'panL', 'panR', 'push', 'still'])).optional(),
   pace: z.number().optional(),
+  captions: SubtitleStyleSchema.optional(),
 });
 
 export const StyleSheetOut = z.object({
@@ -129,6 +147,8 @@ export const VideoSpec = z.object({
   scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional(), card: z.boolean().optional(), speechSec: z.number().optional(), art: z.object({ url: z.string(), kind: z.enum(['image', 'svg']) }).optional() })),
   theme: z.object({ bg: z.string(), fg: z.string(), accent: z.string() }).optional(),
   style: StyleSchema.optional(),
+  /** Fonts the person uploaded: loaded by the render browser from this server. */
+  fonts: z.array(z.object({ family: z.string(), url: z.string() })).optional(),
 });
 export type VideoSpec = z.infer<typeof VideoSpec>;
 export type ScriptOption = z.infer<typeof ScriptOut>['options'][number];
@@ -146,5 +166,6 @@ export const OUTPUT_SCHEMAS = {
   verifyClaims: VerifyOut,
   styleFromSheet: StyleSheetOut,
   artQueries: ArtQueriesOut,
+  subtitleFromSheet: SubtitleSheetOut,
   drawIllustration: DrawOut,
 } as const;

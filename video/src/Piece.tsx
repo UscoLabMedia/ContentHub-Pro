@@ -1,6 +1,9 @@
-import { AbsoluteFill, Audio, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
+import { useEffect, useState } from 'react';
+import { AbsoluteFill, Audio, Sequence, continueRender, delayRender, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { VideoSpec } from '@chp/core/schemas';
 import { DEFAULT_STYLE, heroNumber, type StyleProfile } from '@chp/core/style';
+import './fonts.ts';
+import { captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
 import { Art, Background, Hero, Karaoke, Motif, Particles, camTransform, camera } from './visual.tsx';
 
 const styleOf = (spec: VideoSpec): StyleProfile => {
@@ -46,14 +49,32 @@ const Scene = ({ scene, index, style }: { scene: VideoSpec['scenes'][number]; in
       {scene.art && <Art art={scene.art} style={style} frame={frame} fps={fps} width={width} height={height} hasHero={!!hero} />}
       {hero && <Hero hero={hero} style={style} frame={frame} fps={fps} width={width} height={height} />}
       <Particles style={style} frame={frame} index={index + 7} width={width} height={height} />
-      <Karaoke text={scene.text} style={style} frame={frame} fps={fps} speechSec={scene.speechSec} durationSec={scene.durationSec} width={width} height={height} />
+      <Karaoke text={scene.text} style={style} frame={frame} fps={fps} speechSec={scene.speechSec} durationSec={scene.durationSec} width={width} height={height} index={index} />
     </AbsoluteFill>
   );
+};
+
+/** Waits until the subtitle font (bundled or uploaded by the person) is ready before any frame is drawn. */
+const useSubtitleFonts = (style: StyleProfile, fonts: VideoSpec['fonts']) => {
+  const [handle] = useState(() => delayRender('subtitle fonts'));
+  useEffect(() => {
+    const cap = captionsOf(style);
+    const load = async () => {
+      for (const f of fonts ?? []) {
+        const face = new FontFace(f.family, `url(${f.url})`, { weight: '700' });
+        document.fonts.add(await face.load());
+      }
+      const q = isUserFont(cap.font) ? `700 40px 'user-${cap.font.slice(5)}'` : `${fontInfo(cap.font).weight} 40px ${fontInfo(cap.font).family.split(',')[0]}`;
+      await document.fonts.load(q, 'Aá');
+    };
+    load().catch(() => {}).finally(() => continueRender(handle));
+  }, [handle, style, fonts]);
 };
 
 export const Piece = (spec: VideoSpec) => {
   const { fps } = useVideoConfig();
   const style = styleOf(spec);
+  useSubtitleFonts(style, spec.fonts);
   let from = 0;
   return (
     <AbsoluteFill style={{ background: style.palette.bg }}>

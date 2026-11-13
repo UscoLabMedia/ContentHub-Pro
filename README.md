@@ -141,3 +141,7 @@ Botón **«Probar todo»** (arriba) o `npm run selftest`. La **prueba rápida** 
 ## Estilo desde un video de referencia
 
 En el paso 7, sube un video de referencia: la app mide **en tu PC, sin gastar IA** el ritmo de cortes, los movimientos de cámara, la posición de subtítulos y la paleta, y los aplica como estilo propio. El botón opcional **«Afinar con IA»** envía una sola hoja de fotogramas (1 consulta pequeña, con caché) para detectar el tipo de fondo, trazos a mano y palabras resaltadas. Limitación: la medición local detecta zoom y paneos marcados; los sutiles pueden quedar como «still».
+
+## Subtítulos
+
+En el paso 7, sección **Subtítulos**: elige tipografía (10 fuentes libres incluidas o tu propio archivo .ttf/.otf/.woff2, cifrado en tu bóveda), colores, resaltado de la palabra dicha, posición, tamaño y **animación de entrada**. Marca varias animaciones para **alternarlas escena por escena**. También puedes **copiarlos de un video de referencia**: la app mide en tu PC la posición, el tamaño, los colores, la caja del resaltado y las palabras a la vez; «Afinar con IA» (1 consulta pequeña) describe el tipo de letra y la animación. Se usa la fuente libre más parecida, no la exacta.

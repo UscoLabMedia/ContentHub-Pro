@@ -24,7 +24,8 @@ export function StyleSelector({ project, set }: P) {
   const [ai, setAi] = useState<StyleSheet | null>(null);
   const [base, setBase] = useState('paper');
 
-  const choose = (s: StyleProfile) => set({ ...project, production: { ...project.production, style: s } });
+  // The subtitle look is the person's own choice: picking another visual style keeps it.
+  const choose = (s: StyleProfile) => set({ ...project, production: { ...project.production, style: { ...s, captions: s.captions ?? current.captions } } });
 
   const show = async (s: StyleProfile) => {
     setErr('');

@@ -7,6 +7,8 @@ export * from './deliverables.ts';
 export * from './verification.ts';
 export * from './style.ts';
 export * from './motion.ts';
+export * from './subtitles.ts';
+export * from './captions.ts';
 export * from './freesearch.ts';
 export * from './illustrations.ts';
 export * from './voice/index.ts';

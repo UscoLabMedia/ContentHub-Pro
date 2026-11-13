@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Easing, Img, interpolate, random, spring } from 'remotion';
+import { animFor, captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
 import { captionGroups, formatCount, wordTimings, readingSeconds, type CameraKind, type HeroNumber, type StyleProfile } from '@chp/core/style';
 
 export interface Cam {
@@ -136,30 +137,55 @@ const readable = (hex: string) => {
   return 0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255) > 150 ? '#111111' : '#ffffff';
 };
 
-/** Karaoke captions: up to 3 words at a time, the spoken word pops on a tilted marker. */
-export const Karaoke = ({ text, style, frame, fps, speechSec, durationSec, width, height }: { text: string; style: StyleProfile; frame: number; fps: number; speechSec?: number; durationSec: number; width: number; height: number }) => {
+/** Subtitles: up to N words at a time; the spoken word is marked; each group enters with the scene's animation. */
+export const Karaoke = ({ text, style, frame, fps, speechSec, durationSec, width, height, index }: { text: string; style: StyleProfile; frame: number; fps: number; speechSec?: number; durationSec: number; width: number; height: number; index: number }) => {
+  const cap = captionsOf(style);
   const span = Math.max(0.6, Math.min(speechSec ?? readingSeconds(text), durationSec - 0.35));
   const words = wordTimings(text, 0.15, span);
-  const groups = captionGroups(words);
+  const groups = captionGroups(words, cap.wordsPerGroup);
   const t = frame / fps;
   let g = 0;
   groups.forEach((grp, i) => { if (grp[0]!.from <= t) g = i; });
   const group = groups[g];
   if (!group) return null;
+  const anim = animFor(cap, index);
   const portrait = height > width;
-  const fs = width * (portrait ? 0.072 : 0.042);
-  const center = style.subtitle.position === 'center';
-  const stroke = style.palette.bg;
+  const font = fontInfo(cap.font);
+  const family = isUserFont(cap.font) ? `'user-${cap.font.slice(5)}', sans-serif` : font.family;
+  const fs = width * (portrait ? 0.072 : 0.042) * cap.size * (font.category === 'condensed' ? 1.18 : 1);
+  const enterF = Math.max(0, frame - Math.round(group[0]!.from * fps));
+  const e = interpolate(enterF, [0, 7], [0, 1], { extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
+  const sp = spring({ frame: enterF, fps, config: { damping: anim === 'bounce' ? 7 : 12, stiffness: 200 } });
+  const box: CSSProperties = { position: 'absolute', left: '5%', right: '5%', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: fs * 0.18, fontFamily: family, fontWeight: isUserFont(cap.font) ? 700 : font.weight, fontSize: fs, lineHeight: 1.15, textAlign: 'center' };
+  if (cap.position === 'center') Object.assign(box, { top: '50%', transform: 'translateY(-50%)' });
+  else if (cap.position === 'top') box.top = portrait ? '12%' : '9%';
+  else box.bottom = portrait ? '15%' : '8%';
+  // group-level entrance
+  let ge: CSSProperties = {};
+  if (anim === 'pop') ge = { transform: `scale(${0.6 + 0.4 * Math.min(1.1, sp)})`, opacity: Math.min(1, e * 1.6) };
+  else if (anim === 'slideUp') ge = { transform: `translateY(${(1 - e) * fs * 1.2}px)`, opacity: e };
+  else if (anim === 'bounce') ge = { transform: `translateY(${(1 - sp) * fs * 1.6}px)`, opacity: Math.min(1, e * 2) };
+  else if (anim === 'fade') ge = { opacity: e };
+  else if (anim === 'zoom') ge = { transform: `scale(${2.2 - 1.2 * e})`, opacity: e, filter: `blur(${(1 - e) * 6}px)` };
+  else if (anim === 'shake') ge = { transform: `rotate(${Math.sin(enterF * 1.9) * 5 * (1 - e)}deg) scale(${0.85 + 0.15 * Math.min(1.1, sp)})`, opacity: Math.min(1, e * 2) };
+  else if (anim === 'wipe') ge = { clipPath: `inset(0 ${(1 - e) * 100}% 0 0)` };
+  const sw = fs * cap.stroke.width;
+  const tx = cap.uppercase ? 'uppercase' : 'none';
   return (
-    <div style={{ position: 'absolute', left: '5%', right: '5%', ...(center ? { top: '50%', transform: 'translateY(-50%)' } : { bottom: portrait ? '15%' : '8%' }), display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: fs * 0.18, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 900, fontSize: fs, lineHeight: 1.15, textAlign: 'center' }}>
-      {group.map((w, i) => {
-        const active = t >= w.from && t < w.to + 0.02;
-        const pop = active ? spring({ frame: frame - Math.round(w.from * fps), fps, config: { damping: 11, stiffness: 220 } }) : 1;
-        const marker = active && style.subtitle.marker;
-        return (
-          <span key={`${g}-${i}`} style={{ display: 'inline-block', padding: `0 ${fs * 0.14}px`, borderRadius: fs * 0.12, background: marker ? style.palette.accent : 'transparent', color: marker ? readable(style.palette.accent) : style.palette.fg, transform: `scale(${active ? 1 + 0.16 * Math.min(1, pop) : 1}) rotate(${marker ? -2 : 0}deg)`, textTransform: style.subtitle.uppercase ? 'uppercase' : 'none', WebkitTextStroke: marker ? undefined : `${fs * 0.07}px ${stroke}`, paintOrder: 'stroke fill', textShadow: marker ? undefined : `0 ${fs * 0.05}px 0 ${stroke}88` }}>{w.word}</span>
-        );
-      })}
+    <div style={box}>
+      <div style={{ display: 'contents' }}>
+        {group.map((w, i) => {
+          if (anim === 'typewriter' && t < w.from) return null;
+          const active = t >= w.from && t < w.to + 0.02;
+          const wp = spring({ frame: frame - Math.round(w.from * fps), fps, config: { damping: 11, stiffness: 220 } });
+          const h = cap.highlight;
+          const marked = active && h.mode !== 'none';
+          const shown = anim === 'typewriter' ? w.word.slice(0, Math.max(1, Math.ceil(w.word.length * Math.min(1, (t - w.from) / 0.22)))) : w.word;
+          return (
+            <span key={`${g}-${i}`} style={{ display: 'inline-block', padding: `0 ${fs * 0.14}px`, borderRadius: fs * 0.12, background: marked && h.mode === 'box' ? h.color : 'transparent', color: marked ? (h.mode === 'box' ? h.textColor : h.mode === 'color' ? h.color : cap.color) : cap.color, borderBottom: marked && h.mode === 'underline' ? `${fs * 0.09}px solid ${h.color}` : undefined, transform: `${ge.transform ?? ''} scale(${active ? 1 + 0.12 * Math.min(1, wp) : 1}) rotate(${marked && h.mode === 'box' ? -2 : 0}deg)`, opacity: ge.opacity, filter: ge.filter, clipPath: ge.clipPath, textTransform: tx, WebkitTextStroke: marked && h.mode === 'box' ? undefined : sw > 0 ? `${sw}px ${cap.stroke.color}` : undefined, paintOrder: 'stroke fill', textShadow: cap.shadow && !(marked && h.mode === 'box') ? `0 ${fs * 0.05}px 0 ${cap.stroke.color}88` : undefined }}>{shown}</span>
+          );
+        })}
+      </div>
     </div>
   );
 };

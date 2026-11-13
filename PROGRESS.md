@@ -1,6 +1,6 @@
 # PROGRESS
 
-Estado del proyecto. Rama vigente de la pila: **`feat/illustrations`** (PR #9). Actualizar en cada PR.
+Estado del proyecto. Rama vigente de la pila: **`feat/subtitle-style`** (PR #10). Actualizar en cada PR.
 
 ## Pila de PRs (fusionar en este orden; cada uno apunta al anterior)
 
@@ -15,6 +15,7 @@ Estado del proyecto. Rama vigente de la pila: **`feat/illustrations`** (PR #9). 
 | #7 | `feat/visual-engine` | Motor visual parte 1: cámara, capas, karaoke, números gigantes, estilos | abierto |
 | #8 | `feat/reference-analysis` | Estilo desde video de referencia: análisis local + «Afinar con IA» | abierto |
 | #9 | `feat/illustrations` | Ilustraciones por escena: búsqueda libre (PD/CC0/CC BY) → SVG de Claude; créditos | abierto |
+| #10 | `feat/subtitle-style` | Subtítulos: 10 fuentes libres + fuente propia cifrada, 8 animaciones que rotan por escena, copiar de un video de referencia (local + «Afinar con IA») | abierto |
 
 ## Decisiones tomadas (no volver a preguntar)
 
@@ -28,7 +29,7 @@ Estado del proyecto. Rama vigente de la pila: **`feat/illustrations`** (PR #9). 
 
 ## Pendiente
 
-- Subtítulos desde una referencia (SIGUIENTE; diseño ya decidido, rama nueva `feat/subtitle-style` sobre `feat/illustrations`): copiar tipografía, colores/fondo de la palabra resaltada, animación de entrada y posición/tamaño. Análisis local primero + botón opcional «Afinar con IA» (1 consulta con hoja de recortes de subtítulos). Variedad: biblioteca de animaciones que rotan por escena dentro de un conjunto parecido a la referencia. Fuentes: selección de Google Fonts libres incluidas en el repo (p. ej. Anton, Bebas Neue, Montserrat, Poppins, Bangers, Permanent Marker; se elige la más parecida, no se promete identificar la exacta) y además subir una fuente propia, guardada cifrada en la bóveda (no se versiona).
+- Música y efectos (siguiente fase acordada): pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX; catálogo curado + archivos propios. Preguntar diseño antes.
 - Ilustraciones: probar búsqueda real en Openverse/Commons (sin red en la sesión; solo probado con fixture local).
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
 - Voz en línea (JorgeNeural) con tiempos por palabra para mejor karaoke; revisar la librería con el usuario.
@@ -37,7 +38,7 @@ Estado del proyecto. Rama vigente de la pila: **`feat/illustrations`** (PR #9). 
 ## Límites conocidos / sin verificar
 
 - Sin Windows ni red en la sesión: no probados Piper real, SAPI, confianza de whisper.cpp real, descarga de OCR, búsquedas reales (Google/Wikipedia/OpenAlex/datos.gov.co) ni verificación de páginas reales.
-- Análisis de referencia: los movimientos de cámara suaves se leen como «still».
+- Análisis de referencia: los movimientos de cámara suaves se leen como «still». Subtítulos: la medición local funciona mejor con texto blanco, amarillo u oscuro sobre otro fondo; la tipografía se aproxima con la fuente libre más parecida. Las fuentes propias no viajan con la bóveda exportada: hay que subirlas en cada PC.
 
 ## Tareas del usuario
 

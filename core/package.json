@@ -12,7 +12,8 @@
     "./verification": "./src/verification.ts",
     "./style": "./src/style.ts",
     "./motion": "./src/motion.ts",
-    "./illustrations": "./src/illustrations.ts"
+    "./illustrations": "./src/illustrations.ts",
+    "./subtitles": "./src/subtitles.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

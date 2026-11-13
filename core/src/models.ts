@@ -2,7 +2,7 @@
 export type ModelId = 'claude-haiku-5-5' | 'claude-sonnet-5-5' | 'claude-opus-5-5';
 export type Task =
   | 'trends' | 'treatment' | 'audience' | 'formats' | 'script' | 'metricsAnalysis'
-  | 'sourceHighlights' | 'contentIdeas' | 'publishCopy' | 'verifyClaims' | 'styleFromSheet' | 'artQueries' | 'drawIllustration';
+  | 'sourceHighlights' | 'contentIdeas' | 'publishCopy' | 'verifyClaims' | 'styleFromSheet' | 'artQueries' | 'drawIllustration' | 'subtitleFromSheet';
 export type Effort = 'low' | 'medium' | 'high';
 
 export interface Route {
@@ -26,6 +26,7 @@ export const ROUTES: Record<Task, Route> = {
   publishCopy: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 1400 },
   styleFromSheet: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 500 },
   // One cheap query per script: English search terms per scene. Drawing (Sonnet) only runs when the free search finds nothing.
+  subtitleFromSheet: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 500 },
   artQueries: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 900 },
   drawIllustration: { model: 'claude-sonnet-5-5', effort: 'low', maxTokens: 3500 },
   verifyClaims: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 6000, research: true },

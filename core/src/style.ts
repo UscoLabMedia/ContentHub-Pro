@@ -1,4 +1,6 @@
 // Visual styles for the video template, plus the small local helpers the engine needs.
+import type { SubtitleStyle } from './subtitles.ts';
+
 export interface StylePalette {
   bg: string;
   fg: string;
@@ -23,6 +25,8 @@ export interface StyleProfile {
   cameraPattern?: CameraKind[];
   /** Typical seconds between cuts in the reference (informational). */
   pace?: number;
+  /** Full subtitle look (font, colors, animation...). Without it the simple `subtitle` settings apply. */
+  captions?: SubtitleStyle;
 }
 
 export const STYLES: StyleProfile[] = [
