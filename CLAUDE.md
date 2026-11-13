@@ -17,6 +17,7 @@ Estas reglas son **obligatorias**. Varias están además forzadas por código o 
 9. **Todo dato mostrado indica su fuente** (nombre y enlace). Lo que sea estimación de la IA se rotula como tal (p. ej. «potencial», perfil de audiencia). La búsqueda de temas parte de datos reales (`core/src/radar`); la IA solo ordena y cita ids, nunca inventa cifras.
 10. **Cada capacidad nueva suma un check en `server/src/selftest.ts`** (`npm run selftest`, o «Probar todo» en la app) para saber qué funciona y qué no en cada PC.
 8. **Resolución máxima 1080p** (consumo en celular). No agregar presets 4K. Borrador = mitad de tamaño (540p).
+13. **Mantener `PROGRESS.md` al día:** léelo al empezar una sesión y actualízalo en cada PR (estado, decisiones, pendientes). Es corto a propósito; el estado vigente está en la rama más reciente de la pila de PRs (la que indica el propio archivo), que llega a `main` al fusionar en orden. Sin secretos ni datos personales.
 
 ## Cómo trabajar en este repo (Claude Code)
 
