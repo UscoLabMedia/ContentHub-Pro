@@ -60,3 +60,37 @@ describe('ffmpeg (bundled with Remotion)', () => {
     void spawnSync;
   }, 60_000);
 });
+
+import { PLATFORM_PRESET, PRESETS, scriptToScenes, toSpec, totalDuration, validateSpec } from '../src/index.ts';
+
+describe('script -> scenes', () => {
+  const script = [
+    'GANCHO: ¿Sabías que el café se vende por debajo del costo?',
+    '[3s] Medí cuánto me costaba producir un kilo  (visual: finca)',
+    '[11s] Aprendí a catar y el precio se triplicó  (visual: taza)',
+    '[30s] Empieza por llevar cuentas claras',
+    'CTA: Guarda y comparte',
+    'CAPTION: no debe aparecer',
+  ].join('\n');
+
+  it('builds timed scenes and strips visual notes / captions', () => {
+    const s = scriptToScenes(script);
+    expect(s.map((x) => x.text)).toEqual([
+      '¿Sabías que el café se vende por debajo del costo?',
+      'Medí cuánto me costaba producir un kilo',
+      'Aprendí a catar y el precio se triplicó',
+      'Empieza por llevar cuentas claras',
+      'Guarda y comparte',
+    ]);
+    expect(s.map((x) => x.durationSec)).toEqual([3, 8, 10, 4, 3]); // 11-3=8, 30-11=19 -> clamped to 10, last beat 4
+  });
+  it('validates specs for every platform preset and rejects bad ones', () => {
+    const scenes = scriptToScenes(script);
+    for (const id of Object.values(PLATFORM_PRESET)) expect(validateSpec(toSpec(id, scenes))).toBeNull();
+    expect(validateSpec(toSpec('instagram_carousel', scenes))).toMatch(/no compatible/);
+    expect(validateSpec(toSpec('tiktok', []))).toMatch(/escenas/);
+    expect(validateSpec(toSpec('tiktok', [{ text: 'x', durationSec: 500 }]))).toMatch(/inválida/);
+    expect(totalDuration(scenes)).toBe(28);
+    expect(PRESETS.tiktok!.maxSeconds).toBe(60);
+  });
+});

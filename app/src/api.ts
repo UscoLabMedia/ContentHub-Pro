@@ -1,5 +1,6 @@
 let token = '';
 export const setToken = (t: string) => (token = t);
+export const getToken = () => token;
 
 export interface EngineView {
   engine: 'claude-code' | 'api';

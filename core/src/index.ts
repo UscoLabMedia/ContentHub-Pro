@@ -2,6 +2,7 @@ export * from './crypto/vault.ts';
 export * from './models.ts';
 export * from './schemas.ts';
 export * from './presets.ts';
+export * from './production.ts';
 export * from './ai/gateway.ts';
 export * from './ai/client.ts';
 export * from './ingest/index.ts';
