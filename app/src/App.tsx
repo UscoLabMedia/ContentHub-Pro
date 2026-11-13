@@ -4,7 +4,10 @@ import { STEPS } from './steps.ts';
 import { useProject } from './project.ts';
 import { EditCode } from './components/EditCode.tsx';
 import { Settings } from './components/Settings.tsx';
+import { Step10, Step6, Step7, Step8, Step9 } from './components/Production.tsx';
 import { STEP_COMPONENTS, canAdvance } from './components/Steps.tsx';
+
+const ALL_STEPS = [...STEP_COMPONENTS, Step6, Step7, Step8, Step9, Step10];
 import { Unlock } from './components/Unlock.tsx';
 
 interface Status {
@@ -28,7 +31,7 @@ function Workspace() {
   if (!project) return null;
   const connected = engine?.ready && (engine.engine === 'api' || engine.claude.loggedIn);
 
-  const Current = STEP_COMPONENTS[step - 1];
+  const Current = ALL_STEPS[step - 1];
   const reach = (n: number) => n === 1 || Array.from({ length: n - 1 }, (_, i) => i + 1).every((s) => canAdvance(s, project));
 
   return (
@@ -47,7 +50,7 @@ function Workspace() {
         <nav aria-label="Pasos" className="flex gap-1 overflow-x-auto border-b border-slate-800 p-2 md:w-64 md:flex-col md:border-b-0 md:border-r md:p-4">
           {STEPS.map((s) => {
             const done = s.id < step && canAdvance(s.id, project);
-            const enabled = s.id <= 5 && reach(s.id);
+            const enabled = reach(s.id);
             return (
               <button key={s.id} disabled={!enabled} onClick={() => setStep(s.id)} aria-current={s.id === step ? 'step' : undefined}
                 className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs ${s.id === step ? 'border-indigo-500 bg-indigo-950/40' : 'border-slate-800'} ${enabled ? '' : 'opacity-40'}`}>
@@ -64,7 +67,7 @@ function Workspace() {
       <footer className="flex items-center justify-between border-t border-slate-800 bg-slate-900 px-4 py-3">
         <button disabled={step === 1} onClick={() => setStep(step - 1)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm disabled:opacity-30">Anterior</button>
         <span className="text-xs text-slate-400">Paso {step} de 10</span>
-        <button disabled={step >= 5 || !canAdvance(step, project)} onClick={() => setStep(step + 1)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium disabled:opacity-40">Siguiente</button>
+        <button disabled={step >= 10 || !canAdvance(step, project)} onClick={() => setStep(step + 1)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium disabled:opacity-40">Siguiente</button>
       </footer>
       {editCode && <EditCode onClose={() => setEditCode(false)} />}
       {settings && <Settings onClose={() => setSettings(false)} onChanged={() => setTick((t) => t + 1)} />}

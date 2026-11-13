@@ -23,4 +23,6 @@ export const TASK_PROMPTS: Record<Task, string> = {
     'Recibes un fragmento de transcripción con marcas [mm:ss]. Extrae máximo 6 momentos con valor propio (afirmaciones fuertes, historias, datos, preguntas). startSec/endSec en segundos según las marcas. point: una frase.',
   contentIdeas:
     'Recibes la transcripción (o los momentos clave) de un archivo del creador, con marcas [mm:ss] o [h:mm:ss]. Resume en 2 frases y propón de 6 a 8 piezas de contenido distintas. Cada una: plataforma (tiktok, instagram, facebook, youtube_short, youtube_long, spotify), formato, gancho de una línea, startSec/endSec del tramo fuente (0 si no hay tiempos) y por qué funciona. Prioriza momentos con gancho propio. No inventes nada que no esté en el material.',
+  publishCopy:
+    'Para cada plataforma recibida escribe el texto de publicación en español de Colombia: título corto (si la plataforma lo usa), caption listo para pegar (gancho en la primera línea, máximo 3 líneas, CTA al final), 4-6 hashtags sin # inicial y la franja horaria sugerida (hora de Colombia) como sugerencia, no como dato medido. Respeta el estilo de cada plataforma; en spotify escribe la descripción del episodio.',
 };

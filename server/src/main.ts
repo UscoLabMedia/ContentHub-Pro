@@ -3,17 +3,18 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { createWriteStream, existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Vault, claudeCodeStatus, createClaudeCodeClient, createLlmClient, digestToPrompt, excerpt, ingestFile,
+  Gateway, Vault, VideoSpec, claudeCodeStatus, createClaudeCodeClient, createLlmClient, digestToPrompt, excerpt, ingestFile,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { classify, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
+import { isRenderId, renderFile, renderStatus, startRender } from './render.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.APP_ORIGIN ?? 'http://localhost:5173'; // Vite dev server; same-origin in production
@@ -180,8 +181,47 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // Rendered videos are played by <video>, which can't send headers: accept the session token as ?s= here only.
+    const fm = url.pathname.match(/^\/api\/render\/([a-f0-9]{16})\/file$/);
+    if (fm && req.method === 'GET') {
+      const t = String(url.searchParams.get('s') ?? '');
+      if (!session || t.length !== session.token.length || !timingSafeEqual(Buffer.from(t), Buffer.from(session.token))) return json(res, 401, { error: 'Locked' });
+      const file = renderFile(DATA_DIR, fm[1]!);
+      if (!existsSync(file)) return json(res, 404, { error: 'Not found' });
+      const size = (await stat(file)).size;
+      const head: Record<string, string | number> = { 'content-type': 'video/mp4', 'accept-ranges': 'bytes' };
+      if (url.searchParams.get('dl')) head['content-disposition'] = `attachment; filename="contenthub-${fm[1]}.mp4"`;
+      const range = String(req.headers.range ?? '').match(/^bytes=(\d*)-(\d*)$/);
+      if (range && (range[1] || range[2])) {
+        const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+        const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+        if (start > end || start >= size) return void res.writeHead(416, { 'content-range': `bytes */${size}` }).end();
+        res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1 });
+        return void createReadStream(file, { start, end }).pipe(res);
+      }
+      res.writeHead(200, { ...head, 'content-length': size });
+      return void createReadStream(file).pipe(res);
+    }
+
     if (!session || !authed(req)) return json(res, 401, { error: 'Locked' });
     const s = session;
+
+    // --- video rendering (local, zero tokens) ---
+    if (url.pathname === '/api/render' && req.method === 'POST') {
+      const b = await readBody(req);
+      const spec = VideoSpec.safeParse(b.spec);
+      if (!spec.success || (b.quality !== 'draft' && b.quality !== 'final')) return json(res, 400, { error: 'Especificación de video inválida' });
+      try {
+        return json(res, 200, await startRender(spec.data, b.quality, DATA_DIR, ROOT));
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo iniciar el render' });
+      }
+    }
+    const rm = url.pathname.match(/^\/api\/render\/([a-f0-9]{16})$/);
+    if (rm && req.method === 'GET') {
+      const j = isRenderId(rm[1]!) ? renderStatus(DATA_DIR, rm[1]!) : null;
+      return j ? json(res, 200, j) : json(res, 404, { error: 'Render not found' });
+    }
 
     // --- AI engine ---
     if (url.pathname === '/api/engine' && req.method === 'GET')

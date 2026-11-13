@@ -71,6 +71,13 @@ export const SourceIdeasOut = z.object({
 });
 export type SourceIdea = z.infer<typeof SourceIdeasOut>['ideas'][number];
 
+export const PublishCopyOut = z.object({
+  items: z.array(
+    z.object({ platform: PlatformId, title: z.string(), caption: z.string(), hashtags: z.array(z.string()), bestTime: z.string() }),
+  ),
+});
+export type PublishCopy = z.infer<typeof PublishCopyOut>['items'][number];
+
 /** Input of the Remotion template; built locally from a script (zero tokens). */
 export const VideoSpec = z.object({
   preset: z.string(),
@@ -89,4 +96,5 @@ export const OUTPUT_SCHEMAS = {
   metricsAnalysis: MetricsAnalysisOut,
   sourceHighlights: HighlightsOut,
   contentIdeas: SourceIdeasOut,
+  publishCopy: PublishCopyOut,
 } as const;

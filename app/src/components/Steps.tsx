@@ -4,19 +4,19 @@ import type { AudienceOut, FormatsOut, ScriptOut, TrendsOut, TreatmentOut } from
 import { api } from '../api.ts';
 import { useTask, type AiState } from '../ai.ts';
 import { Sources } from './Sources.tsx';
-import type { Project } from '../project.ts';
+import { specKey, type Project } from '../project.ts';
 
-type P = { project: Project; set: (p: Project) => void };
-const field = 'w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm focus:border-indigo-500 focus:outline-none';
-const primary = 'rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40';
-const card = (on: boolean) => `w-full rounded-xl border p-4 text-left transition ${on ? 'border-indigo-500 bg-indigo-950/30' : 'border-slate-800 bg-slate-900/60 hover:border-slate-600'}`;
+export type P = { project: Project; set: (p: Project) => void };
+export const field = 'w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm focus:border-indigo-500 focus:outline-none';
+export const primary = 'rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40';
+export const card = (on: boolean) => `w-full rounded-xl border p-4 text-left transition ${on ? 'border-indigo-500 bg-indigo-950/30' : 'border-slate-800 bg-slate-900/60 hover:border-slate-600'}`;
 
 export const PLATFORMS = [
   ['tiktok', 'TikTok'], ['instagram', 'Instagram'], ['facebook', 'Facebook'],
   ['youtube_short', 'YouTube Shorts'], ['youtube_long', 'YouTube (largo)'], ['spotify', 'Spotify'],
 ] as const;
 
-function Head({ n, title, hint }: { n: number; title: string; hint: string }) {
+export function Head({ n, title, hint }: { n: number; title: string; hint: string }) {
   return (
     <div>
       <span className="text-xs font-semibold uppercase tracking-widest text-indigo-400">Paso {n} de 10</span>
@@ -26,7 +26,7 @@ function Head({ n, title, hint }: { n: number; title: string; hint: string }) {
   );
 }
 
-function Status({ s }: { s: AiState<unknown> }) {
+export function Status({ s }: { s: AiState<unknown> }) {
   if (s.status === 'loading') return <p className="text-sm text-slate-400" role="status">Generando…</p>;
   if (s.status === 'error') return <p className="text-sm text-rose-400" role="alert">{s.message}</p>;
   if (s.status === 'ok' && s.cached) return <p className="text-xs text-slate-500">Respuesta guardada (sin costo).</p>;
@@ -198,6 +198,19 @@ export function Step5({ project, set }: P) {
 
 export const STEP_COMPONENTS = [Step1, Step2, Step3, Step4, Step5];
 
-/** A step is complete only when its required choice exists. */
-export const canAdvance = (step: number, p: Project): boolean =>
-  [!!p.topic.trim(), !!p.treatment, !!p.audience.anchor.trim(), p.platforms.length > 0, !!p.script.text.trim()][step - 1] ?? false;
+/** A step is complete only when its required choice exists (and, for renders, is not out of date). */
+export const canAdvance = (step: number, p: Project): boolean => {
+  const key = specKey(p);
+  return [
+    !!p.topic.trim(),
+    !!p.treatment,
+    !!p.audience.anchor.trim(),
+    p.platforms.length > 0,
+    !!p.script.text.trim(),
+    p.production.scenes.length > 0,
+    p.renders.draftApproved && p.renders.draft?.spec === key,
+    p.renders.final?.spec === key,
+    p.publish.posted.length > 0,
+    true,
+  ][step - 1] ?? false;
+};
