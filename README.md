@@ -42,6 +42,17 @@ Paso 1 → pestaña **«Desde mis archivos»**: sube un podcast, audio, video, t
 
 Si cambias escenas, estilo o voz, el video queda marcado como desactualizado y hay que generarlo de nuevo. Pendiente: carruseles de imágenes, música de fondo y publicación automática (cada plataforma exige tu propia sesión y credenciales de desarrollador).
 
+## Revisión de la transcripción (audio y video)
+
+Después de transcribir un podcast, entrevista o video, **tú eliges los tramos** que quieres usar (a mano, o con sugerencias de la IA) y la app te pide confirmar cada uno:
+
+- ves el texto y **escuchas ese fragmento** del audio;
+- respondes «está bien», «hay un error» (lo corriges) o «no lo entiendo bien» (escribes qué dice; si lo dejas vacío, ese tramo no se usa);
+- se avisan con ⚠ las partes que conviene escuchar: cifras, nombres propios y baja confianza del reconocimiento;
+- el contenido (ideas y guion) se crea **solo con los tramos confirmados**, con tu texto corregido.
+
+Para poder escucharlos se guarda una **copia temporal del audio, cifrada con tu bóveda** (en `~/.contenthub-pro/review`). Se borra al confirmar la revisión o al quitar el archivo; la app nunca la deja en claro en disco.
+
 ## Fuentes de los datos (búsqueda de temas)
 
 Los temas salen de datos públicos reales y cada uno muestra de dónde vienen (con enlace):

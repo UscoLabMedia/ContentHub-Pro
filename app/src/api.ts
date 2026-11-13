@@ -21,6 +21,9 @@ export interface SourceView {
   durationSec: number;
   timed: boolean;
   words: number;
+  reviewed: boolean;
+  hasAudio: boolean;
+  selectionCount: number;
 }
 
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {

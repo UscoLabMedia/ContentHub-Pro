@@ -10,10 +10,10 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, createClaudeCodeClient, createLlmClient, digestToPrompt, excerpt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
-import { classify, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
+import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderFile, renderStatus, startRender } from './render.ts';
 import { runSelfTest, type CheckResult } from './selftest.ts';
 
@@ -168,6 +168,24 @@ async function sendFile(req: IncomingMessage, res: ServerResponse, file: string,
   createReadStream(file).pipe(res);
 }
 
+/** Decrypted review audio kept in memory only (never written back to disk in clear). */
+const audioCache = new Map<string, Buffer>();
+const dropCached = (id: string) => audioCache.delete(id);
+
+function sendBytes(req: IncomingMessage, res: ServerResponse, buf: Buffer, type: string): void {
+  const size = buf.length;
+  const range = String(req.headers.range ?? '').match(/^bytes=(\d*)-(\d*)$/);
+  if (range && (range[1] || range[2])) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+    if (start > end || start >= size) return void res.writeHead(416, { 'content-range': `bytes */${size}` }).end();
+    res.writeHead(206, { 'content-type': type, 'accept-ranges': 'bytes', 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1 });
+    return void res.end(buf.subarray(start, end + 1));
+  }
+  res.writeHead(200, { 'content-type': type, 'accept-ranges': 'bytes', 'content-length': size });
+  res.end(buf);
+}
+
 const tokenOk = (t: string): boolean => !!session && t.length === session.token.length && timingSafeEqual(Buffer.from(t), Buffer.from(session.token));
 
 const server = createServer(async (req, res) => {
@@ -220,6 +238,20 @@ const server = createServer(async (req, res) => {
     // these two read-only routes accept the session token as ?s=.
     const fm = url.pathname.match(/^\/api\/render\/([a-f0-9]{16})\/file$/);
     const am = url.pathname.match(/^\/api\/audio\/([a-f0-9]{40})\.wav$/);
+    const rm2 = url.pathname.match(/^\/api\/sources\/([a-f0-9]{16})\/audio$/);
+    if (rm2 && req.method === 'GET') {
+      if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
+      const rec = session!.sources.get(rm2[1]!);
+      const file = rec ? audioPath(DATA_DIR, rec) : null;
+      if (!rec || !file || !existsSync(file)) return json(res, 404, { error: 'No hay audio para revisar (ya se borró o no se guardó)' });
+      let buf = audioCache.get(rec.id);
+      if (!buf) {
+        buf = Buffer.from(await session!.vault.openBytes(new Uint8Array(await readFile(file))));
+        if (audioCache.size >= 2) audioCache.delete(audioCache.keys().next().value!);
+        audioCache.set(rec.id, buf);
+      }
+      return sendBytes(req, res, buf, 'audio/mpeg');
+    }
     if ((fm || am) && req.method === 'GET') {
       if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
       const file = fm ? renderFile(DATA_DIR, fm[1]!) : tts.cacheFile(am![1]!);
@@ -362,25 +394,57 @@ const server = createServer(async (req, res) => {
       const rec: SourceRecord = { id, name, kind, createdAt: Date.now(), status: 'processing', progress: 1, label: 'En cola', durationSec: 0, timed: false, words: 0, segments: [] };
       s.sources.set(id, rec);
       const quality: Quality = url.searchParams.get('quality') === 'better' ? 'better' : 'fast';
-      void processSource(rec, file, DATA_DIR, quality, () => saveSources(s));
+      void processSource(rec, file, DATA_DIR, quality, () => saveSources(s), (b) => s.vault.sealBytes(b));
       return json(res, 200, { id });
     }
-    const m = url.pathname.match(/^\/api\/sources\/([a-f0-9]+)(?:\/(ideas|excerpt))?$/);
+    const m = url.pathname.match(/^\/api\/sources\/([a-f0-9]+)(?:\/(ideas|excerpt|lines|review|audio))?$/);
     if (m) {
       const rec = s.sources.get(m[1]!);
       if (!rec) return json(res, 404, { error: 'Source not found' });
       if (!m[2] && req.method === 'GET') return json(res, 200, { source: toView(rec) });
       if (!m[2] && req.method === 'DELETE') {
+        await dropAudio(DATA_DIR, rec);
+        dropCached(rec.id);
         s.sources.delete(rec.id);
         await saveSources(s);
         return json(res, 200, { ok: true });
       }
       if (m[2] === 'excerpt' && req.method === 'GET')
-        return json(res, 200, { text: excerpt(rec.segments, Number(url.searchParams.get('start') ?? 0), Number(url.searchParams.get('end') ?? 0)) });
+        return json(res, 200, { text: excerptFor(rec, Number(url.searchParams.get('start') ?? 0), Number(url.searchParams.get('end') ?? 0)) });
+      if (m[2] === 'lines' && req.method === 'GET')
+        return json(res, 200, { lines: toReviewLines(rec.segments), hasAudio: !!rec.audio, selection: rec.selection ?? [], reviewed: !!rec.reviewed });
+      if (m[2] === 'audio' && req.method === 'DELETE') {
+        await dropAudio(DATA_DIR, rec);
+        dropCached(rec.id);
+        await saveSources(s);
+        return json(res, 200, { ok: true });
+      }
+      if (m[2] === 'review' && req.method === 'PUT') {
+        const b = await readBody(req);
+        const blocks: ReviewBlock[] = Array.isArray(b.blocks) ? b.blocks.slice(0, 200).map((x: Partial<ReviewBlock>) => ({
+          startSec: Number(x.startSec), endSec: Number(x.endSec), text: String(x.text ?? '').slice(0, 5000),
+          status: x.status === 'corrected' || x.status === 'unclear' ? x.status : 'ok',
+        })) : [];
+        if (blocks.some((x) => !Number.isFinite(x.startSec) || !Number.isFinite(x.endSec) || x.endSec < x.startSec)) return json(res, 400, { error: 'Tramos inválidos' });
+        rec.selection = blocks;
+        if (b.finish === true) {
+          rec.reviewed = true;
+          await dropAudio(DATA_DIR, rec); // the temporary listening copy ends with the review
+          dropCached(rec.id);
+        }
+        await saveSources(s);
+        return json(res, 200, { ok: true, usable: blocks.filter(usableBlock).length, unclear: blocks.filter((x) => !usableBlock(x)).length });
+      }
       if (m[2] === 'ideas' && req.method === 'POST') {
         if (rec.status !== 'ready') return json(res, 409, { error: 'El archivo aún se está procesando' });
         if (!s.gateway) return json(res, 409, { error: 'Elige un motor de IA en Ajustes (cuenta de Claude Code o clave de API)' });
-        return json(res, 200, await ideasFor(s.gateway, rec));
+        const scope = (await readBody(req)).scope === 'selection' ? 'selection' : 'all';
+        try {
+          return json(res, 200, await ideasFor(s.gateway, rec, scope));
+        } catch (e) {
+          if (e instanceof Error && /tramos confirmados/.test(e.message)) return json(res, 409, { error: e.message });
+          throw e;
+        }
       }
     }
 

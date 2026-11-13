@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { z } from 'zod';
 import type { SourceIdeasOut } from '@chp/core/schemas';
 import { api, uploadSource, type SourceView } from '../api.ts';
+import { TranscriptReview } from './TranscriptReview.tsx';
 
 type Ideas = z.infer<typeof SourceIdeasOut>;
 export type Idea = Ideas['ideas'][number];
@@ -15,6 +16,7 @@ export function Sources({ selected, onPick }: { selected: string; onPick: (idea:
   const [quality, setQuality] = useState('fast');
   const [upload, setUpload] = useState<{ name: string; pct: number } | null>(null);
   const [err, setErr] = useState('');
+  const [reviewing, setReviewing] = useState<SourceView | null>(null);
   const [ideas, setIdeas] = useState<Record<string, Ideas | 'loading' | string>>({});
   const input = useRef<HTMLInputElement>(null);
 
@@ -40,10 +42,10 @@ export function Sources({ selected, onPick }: { selected: string; onPick: (idea:
     void load();
   };
 
-  const gen = async (s: SourceView) => {
+  const gen = async (s: SourceView, scope: 'all' | 'selection' = 'all') => {
     setIdeas((p) => ({ ...p, [s.id]: 'loading' }));
     try {
-      const r = await api<{ data: Ideas }>(`/api/sources/${s.id}/ideas`, { method: 'POST' });
+      const r = await api<{ data: Ideas }>(`/api/sources/${s.id}/ideas`, { method: 'POST', json: { scope } });
       setIdeas((p) => ({ ...p, [s.id]: r.data }));
     } catch (e) {
       setIdeas((p) => ({ ...p, [s.id]: (e as Error).message }));
@@ -87,7 +89,18 @@ export function Sources({ selected, onPick }: { selected: string; onPick: (idea:
             {s.status === 'ready' && (
               <>
                 <p className="text-xs text-slate-400">{s.words.toLocaleString()} palabras{s.timed ? ` · ${mmss(s.durationSec)}` : ''}</p>
-                {!r && <button onClick={() => void gen(s)} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium hover:bg-indigo-500">Generar ideas de contenido</button>}
+                {(s.kind === 'audio' || s.kind === 'video') && (
+                  <p className="text-xs text-slate-300">
+                    {s.reviewed ? <span className="text-emerald-400">✓ {s.selectionCount} tramo(s) revisados y confirmados por ti</span> : 'Antes de crear contenido, elige los tramos que usarás y confírmame que la transcripción está bien.'}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {(s.kind === 'audio' || s.kind === 'video') && (
+                    <button onClick={() => setReviewing(s)} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium hover:bg-indigo-500">{s.reviewed ? 'Volver a elegir tramos' : 'Elegir y revisar tramos'}</button>
+                  )}
+                  {s.reviewed && <button onClick={() => void gen(s, 'selection')} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium hover:bg-emerald-500">Ideas de los tramos confirmados</button>}
+                  {!r && <button onClick={() => void gen(s)} className={`rounded-lg px-3 py-2 text-xs font-medium ${s.kind === 'audio' || s.kind === 'video' ? 'border border-slate-700 hover:bg-slate-800' : 'bg-indigo-600 hover:bg-indigo-500'}`}>{s.kind === 'audio' || s.kind === 'video' ? 'Ideas de todo el archivo (sin revisar)' : 'Generar ideas de contenido'}</button>}
+                </div>
                 {r === 'loading' && <p className="text-xs text-slate-400" role="status">Analizando el material…</p>}
                 {typeof r === 'string' && r !== 'loading' && <p className="text-xs text-rose-400" role="alert">{r}</p>}
                 {r && typeof r === 'object' && (
@@ -112,6 +125,7 @@ export function Sources({ selected, onPick }: { selected: string; onPick: (idea:
           </div>
         );
       })}
+      {reviewing && <TranscriptReview source={reviewing} onClose={() => setReviewing(null)} onDone={() => { setReviewing(null); void load(); }} />}
     </div>
   );
 }

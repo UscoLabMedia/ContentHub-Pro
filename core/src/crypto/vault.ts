@@ -9,6 +9,7 @@ const dec = new TextDecoder();
 const AAD_DATA = enc.encode('chp-v2-data');
 const AAD_WRAP = enc.encode('chp-v2-wrap');
 export const DEFAULT_ITERATIONS = 600_000;
+const AUDIO_CHUNK = 4 * 1024 * 1024;
 const RECOVERY_ITERATIONS = 100_000; // recovery key already has 128 bits of entropy
 
 interface Wrap {
@@ -149,6 +150,46 @@ export class Vault implements KeyValueStore {
     const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: AAD_DATA }, await dataKey(this.#dek), enc.encode(JSON.stringify(this.#data))));
     const blob: Blob = { v: 2, pw: this.#pw, rec: this.#rec, iv: b64(iv), ct: b64(ct) };
     await this.#storage.write(JSON.stringify(blob));
+  }
+
+  /**
+   * Encrypts arbitrary bytes (e.g. a review copy of an audio file) with the vault's data key, in 4 MB chunks.
+   * Each chunk is bound to its position and to "is last", so reordering or truncating is detected.
+   */
+  async sealBytes(data: Uint8Array): Promise<Uint8Array> {
+    const key = await dataKey(this.#dek);
+    const out: Uint8Array[] = [enc.encode('CHPA1')];
+    for (let off = 0, n = 0; off < data.length || n === 0; off += AUDIO_CHUNK, n++) {
+      const iv = rand(12);
+      const last = off + AUDIO_CHUNK >= data.length ? 1 : 0;
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: enc.encode(`chp-audio|${n}|${last}`) }, key, new Uint8Array(data.subarray(off, off + AUDIO_CHUNK))));
+      const len = new Uint8Array(4);
+      new DataView(len.buffer).setUint32(0, ct.length, true);
+      out.push(iv, len, ct);
+    }
+    return Buffer.concat(out);
+  }
+
+  async openBytes(sealed: Uint8Array): Promise<Uint8Array> {
+    const b = Buffer.from(sealed.buffer, sealed.byteOffset, sealed.byteLength);
+    if (b.subarray(0, 5).toString('ascii') !== 'CHPA1') throw new Error('Not an encrypted audio file');
+    const key = await dataKey(this.#dek);
+    const out: Uint8Array[] = [];
+    let off = 5;
+    for (let n = 0; off < b.length; n++) {
+      const iv = new Uint8Array(b.subarray(off, off + 12));
+      const len = b.readUInt32LE(off + 12);
+      const ct = new Uint8Array(b.subarray(off + 16, off + 16 + len));
+      if (ct.length !== len) throw new Error('Encrypted audio is truncated');
+      off += 16 + len;
+      const last = off >= b.length ? 1 : 0;
+      try {
+        out.push(new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: enc.encode(`chp-audio|${n}|${last}`) }, key, ct)));
+      } catch {
+        throw new Error('Encrypted audio is corrupted or incomplete');
+      }
+    }
+    return Buffer.concat(out);
   }
 
   /** Works after opening with either the password or the recovery key. */
