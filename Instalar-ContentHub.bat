@@ -13,7 +13,7 @@ exit /b
 #PS1#
 $ErrorActionPreference = 'Stop'
 $repo   = 'https://github.com/UscoLabMedia/ContentHub-Pro.git'
-$branch = 'feat/sources-and-engine'   # cambiar a 'main' cuando los cambios se fusionen
+$branch = 'main'
 $dir    = Join-Path $env:USERPROFILE 'ContentHub-Pro'
 
 function Have($c) { [bool](Get-Command $c -ErrorAction SilentlyContinue) }

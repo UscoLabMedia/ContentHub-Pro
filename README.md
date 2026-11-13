@@ -7,7 +7,7 @@ Plataformas: TikTok, Instagram, Facebook, YouTube (largo y Shorts) y Spotify.
 
 **PC nuevo:** copia el archivo `Instalar-ContentHub.bat` (es uno solo) y haz doble clic. Instala Git y Node.js si faltan, descarga el proyecto, crea un acceso directo «ContentHub Pro» en el Escritorio y abre la app. Si GitHub pide iniciar sesión, hazlo en la ventana que se abre.
 
-**Día a día:** doble clic en el acceso directo (o en `ContentHub.bat`). Se actualiza solo desde GitHub si no tienes cambios locales, instala lo que falte (incluido Claude Code), prepara la interfaz y abre el navegador.
+**Día a día:** doble clic en el acceso directo (o en `ContentHub.bat`). Se actualiza solo desde la rama `main` de GitHub (siempre lo último) si no tienes cambios locales, instala lo que falte (incluido Claude Code), prepara la interfaz y abre el navegador.
 
 macOS: `ContentHub.command` · Linux: `./ContentHub.sh`. También funciona en Codespaces (`.devcontainer`).
 
@@ -55,4 +55,5 @@ Paso 1 → pestaña **«Desde mis archivos»**: sube un podcast, audio, video, t
 - `feat/scaffold`: estructura, cifrado, gateway con presupuesto, ingesta local y plantilla de video.
 - `feat/steps-1-5`: recuperación de contraseña, presupuesto ligado a la cuenta, inicio de un clic y pasos 1–5 con la IA real.
 - `feat/sources-and-engine`: sin presupuesto, IA con tu cuenta de Claude Code, instalador de Windows, botón de edición con Claude Code y contenido desde archivos.
+- `main` contiene todo lo anterior y es lo que recibe cada PC.
 - Siguiente: producción y render (6–8), publicación (9) y análisis de resultados (10).

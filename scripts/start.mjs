@@ -48,6 +48,12 @@ if (!process.env.CHP_NO_UPDATE && existsSync(join(root, '.git'))) {
   say('Buscando actualizaciones…');
   const dirty = spawnSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' });
   if (dirty.status === 0 && dirty.stdout.trim() === '') {
+    // Always follow main: a PC left on an old feature branch moves back to main automatically.
+    const branch = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+    if (branch !== 'main') {
+      spawnSync('git', ['fetch', '--quiet', 'origin', 'main'], { cwd: root, timeout: 30_000 });
+      spawnSync('git', ['checkout', '--quiet', 'main'], { cwd: root });
+    }
     const before = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout;
     const pull = spawnSync('git', ['pull', '--ff-only', '--quiet'], { cwd: root, stdio: 'inherit', timeout: 30_000 });
     changed = pull.status === 0 && spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout !== before;
