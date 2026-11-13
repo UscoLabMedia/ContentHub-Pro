@@ -28,7 +28,7 @@ Estado del proyecto. Rama vigente de la pila: **`feat/illustrations`** (PR #9). 
 
 ## Pendiente
 
-- Subtítulos desde una referencia (pedido del usuario): subir video/imagen de referencia, identificar tipografía y animación del subtítulo y no repetir siempre el mismo estilo. Preguntar diseño antes (tipografías libres tipo Google Fonts, detección local vs IA, variantes).
+- Subtítulos desde una referencia (SIGUIENTE; diseño ya decidido, rama nueva `feat/subtitle-style` sobre `feat/illustrations`): copiar tipografía, colores/fondo de la palabra resaltada, animación de entrada y posición/tamaño. Análisis local primero + botón opcional «Afinar con IA» (1 consulta con hoja de recortes de subtítulos). Variedad: biblioteca de animaciones que rotan por escena dentro de un conjunto parecido a la referencia. Fuentes: selección de Google Fonts libres incluidas en el repo (p. ej. Anton, Bebas Neue, Montserrat, Poppins, Bangers, Permanent Marker; se elige la más parecida, no se promete identificar la exacta) y además subir una fuente propia, guardada cifrada en la bóveda (no se versiona).
 - Ilustraciones: probar búsqueda real en Openverse/Commons (sin red en la sesión; solo probado con fixture local).
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
 - Voz en línea (JorgeNeural) con tiempos por palabra para mejor karaoke; revisar la librería con el usuario.
