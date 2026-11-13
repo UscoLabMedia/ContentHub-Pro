@@ -43,7 +43,8 @@ export class Gateway {
   constructor(private d: GatewayDeps) {}
   private now = () => (this.d.now ?? Date.now)();
 
-  async run<T extends Task>(task: T, input: unknown): Promise<GatewayResult<z.infer<(typeof OUTPUT_SCHEMAS)[T]>>> {
+  /** `opts.images` are file paths the model should look at; put a hash of them in `input` so the cache stays correct. */
+  async run<T extends Task>(task: T, input: unknown, opts: { images?: string[] } = {}): Promise<GatewayResult<z.infer<(typeof OUTPUT_SCHEMAS)[T]>>> {
     type Out = z.infer<(typeof OUTPUT_SCHEMAS)[T]>;
     const route = ROUTES[task];
     const user = typeof input === 'string' ? input : JSON.stringify(input);
@@ -57,7 +58,7 @@ export class Gateway {
     let res;
     for (let attempt = 0; ; attempt++) {
       try {
-        res = await this.d.llm.complete({ ...route, system, user, schema: OUTPUT_SCHEMAS[task] });
+        res = await this.d.llm.complete({ ...route, system, user, schema: OUTPUT_SCHEMAS[task], images: opts.images });
         break;
       } catch (e) {
         const delay = RETRY_DELAYS_MS[attempt];

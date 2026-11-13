@@ -137,3 +137,7 @@ Botón **«Probar todo»** (arriba) o `npm run selftest`. La **prueba rápida** 
 - `feat/production-publish-analysis`: producción y render (6–8), publicación (9) y análisis de resultados (10).
 - `feat/voice-radar-selftest`: voces gratuitas (muestras y narración), fuentes de datos con enlaces, prueba del sistema.
 - Pendiente: carruseles, música de fondo, cortes de clips del podcast.
+
+## Estilo desde un video de referencia
+
+En el paso 7, sube un video de referencia: la app mide **en tu PC, sin gastar IA** el ritmo de cortes, los movimientos de cámara, la posición de subtítulos y la paleta, y los aplica como estilo propio. El botón opcional **«Afinar con IA»** envía una sola hoja de fotogramas (1 consulta pequeña, con caché) para detectar el tipo de fondo, trazos a mano y palabras resaltadas. Limitación: la medición local detecta zoom y paneos marcados; los sutiles pueden quedar como «still».

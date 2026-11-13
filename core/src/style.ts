@@ -6,6 +6,9 @@ export interface StylePalette {
   accent2: string;
 }
 
+export type CameraKind = 'zoomIn' | 'zoomOut' | 'panL' | 'panR' | 'push' | 'still';
+export const CAMERA_KINDS: CameraKind[] = ['zoomIn', 'zoomOut', 'panL', 'panR', 'push', 'still'];
+
 export interface StyleProfile {
   id: string;
   name: string;
@@ -16,6 +19,10 @@ export interface StyleProfile {
   motion: number;
   subtitle: { uppercase: boolean; marker: boolean; position: 'bottom' | 'center' };
   particles: boolean;
+  /** Order of camera moves copied from a reference (repeats). Without it the default rotation is used. */
+  cameraPattern?: CameraKind[];
+  /** Typical seconds between cuts in the reference (informational). */
+  pace?: number;
 }
 
 export const STYLES: StyleProfile[] = [
@@ -141,12 +148,19 @@ export function paletteFromRgb(rgb: Uint8Array): StylePalette {
     e.n++; e.r += r; e.g += g; e.b += b;
     buckets.set(k, e);
   }
-  const colors = [...buckets.values()].sort((a, b) => b.n - a.n).slice(0, 24).map((e) => ({ r: e.r / e.n, g: e.g / e.n, b: e.b / e.n, n: e.n }));
+  const all = [...buckets.values()].map((e) => ({ r: e.r / e.n, g: e.g / e.n, b: e.b / e.n, n: e.n }));
+  const total = all.reduce((s, c) => s + c.n, 0);
+  const top = [...all].sort((a, b) => b.n - a.n).slice(0, 24);
+  // Text is thin: its extreme colors can fall outside the most common ones, so keep the darkest/lightest that appear at all.
+  const present = all.filter((c) => c.n >= total * 0.0015);
+  const colors = [...new Set([...top, ...[...present].sort((a, b) => lum(a.r, a.g, a.b) - lum(b.r, b.g, b.b)).slice(0, 1), ...[...present].sort((a, b) => lum(b.r, b.g, b.b) - lum(a.r, a.g, a.b)).slice(0, 1)])];
   if (!colors.length) return STYLES[1]!.palette;
   const dist = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
   const bg = colors[0]!;
   const fg = [...colors].sort((a, b) => Math.abs(lum(b.r, b.g, b.b) - lum(bg.r, bg.g, bg.b)) - Math.abs(lum(a.r, a.g, a.b) - lum(bg.r, bg.g, bg.b)))[0]!;
-  const rest = colors.filter((c) => c !== bg && c !== fg && dist(c, bg) > 60 && dist(c, fg) > 40).sort((a, b) => sat(b.r, b.g, b.b) * b.n ** 0.3 - sat(a.r, a.g, a.b) * a.n ** 0.3);
+  const vivid = (a: (typeof colors)[number], b: (typeof colors)[number]) => sat(b.r, b.g, b.b) * b.n ** 0.3 - sat(a.r, a.g, a.b) * a.n ** 0.3;
+  let rest = colors.filter((c) => c !== bg && c !== fg && dist(c, bg) > 60 && dist(c, fg) > 40).sort(vivid);
+  if (!rest.length) rest = colors.filter((c) => c !== bg && c !== fg && dist(c, bg) > 22).sort(vivid); // low-contrast references
   const accent = rest[0] ?? fg;
   const accent2 = rest.find((c) => dist(c, accent) > 70) ?? accent;
   return { bg: toHex(bg.r, bg.g, bg.b), fg: toHex(fg.r, fg.g, fg.b), accent: toHex(accent.r, accent.g, accent.b), accent2: toHex(accent2.r, accent2.g, accent2.b) };

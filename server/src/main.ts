@@ -1,7 +1,7 @@
 // Local server (127.0.0.1 only). Holds the vault key and secrets in memory; the browser never sees them.
 // Also serves the built app (app/dist) so one process = the whole product (see scripts/start.mjs).
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
 import { mkdir, readFile, rm as removeFile, stat, writeFile } from 'node:fs/promises';
@@ -10,14 +10,14 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, creditCardText, creditsFrom, gate, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
 import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
-import { paletteFromFile } from './reference.ts';
+import { analyzeReference } from './reference.ts';
 import { checkMany } from './verify.ts';
 import { getPackage, isPackageId, packageDir, startPackage, type PackageRequest } from './deliverables.ts';
 
@@ -52,6 +52,8 @@ interface VerifyJob {
   checks?: SceneCheck[];
 }
 const verifyJobs = new Map<string, VerifyJob>();
+/** Contact sheets of recent references, in memory only (for the optional "refine with AI" step). */
+const sheets = new Map<string, Buffer>();
 /** Verification checks the person has saved in the project (keyed by scene text). */
 const projectChecks = (s: { vault: Vault }): Record<string, SceneCheck> => s.vault.get<{ verification?: Record<string, SceneCheck> }>('project')?.verification ?? {};
 const pendingMessage = (n: number) => `Hay ${n} escena(s) sin verificar. Verifica sus fuentes o márcalas como opinión en el paso de producción.`;
@@ -389,9 +391,29 @@ const server = createServer(async (req, res) => {
       const file = join(tmp, `ref-${id}${extname(name).toLowerCase()}`);
       try {
         await pipeline(req, createWriteStream(file));
-        return json(res, 200, { palette: await paletteFromFile(file, tmp, id) });
+        const an = await analyzeReference(file, tmp, id);
+        if (an.sheet) {
+          if (sheets.size >= 3) sheets.delete(sheets.keys().next().value!);
+          sheets.set(id, an.sheet);
+        }
+        return json(res, 200, { id, palette: an.palette, fingerprint: an.fingerprint ?? null, hasSheet: !!an.sheet });
       } catch {
         return json(res, 422, { error: 'No pude leer ese archivo como imagen o video' });
+      } finally {
+        await removeFile(file, { force: true });
+      }
+    }
+
+    if (url.pathname === '/api/style/reference/ai' && req.method === 'POST') {
+      // One small AI query: a single contact-sheet image. Cached by the sheet's hash, so the same reference never costs twice.
+      const id = String((await readBody(req)).id ?? '');
+      const sheet = sheets.get(id);
+      if (!sheet) return json(res, 404, { error: 'Esa referencia ya no está disponible; vuelve a subirla' });
+      if (!s.gateway) return json(res, 409, { error: 'Elige un motor de IA en Ajustes' });
+      const file = join(claudeWorkDir(), `sheet-${id}.png`);
+      await writeFile(file, sheet);
+      try {
+        return json(res, 200, await s.gateway.run('styleFromSheet', `HOJA ${createHash('sha1').update(sheet).digest('hex')}`, { images: [file] }));
       } finally {
         await removeFile(file, { force: true });
       }
