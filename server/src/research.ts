@@ -1,6 +1,6 @@
 // AI-assisted source finding: the model searches the web per scene, then EVERY cited page is opened locally
 // and checked for the claimed figures/quotes. Nothing the model says is trusted without that check.
-import { textKey, type Gateway, type SceneCheck } from '@chp/core';
+import { searchFree, splitClaims, textKey, type Gateway, type SceneCheck } from '@chp/core';
 import { checkMany } from './verify.ts';
 
 const BATCH = 8;
@@ -40,4 +40,34 @@ export async function researchScenes(gw: Gateway, scenes: ResearchScene[], onPro
   flat.forEach((f, i) => Object.assign(f.s, { check: results[i]!.check, snippet: results[i]!.snippet }));
   onProgress(100, 'Listo');
   return unique.map((u) => found.get(u.key) ?? { textKey: u.key, claims: [] });
+}
+
+/**
+ * Free search: public APIs (Wikipedia, OpenAlex, datos.gov.co) + the local check. No AI, no plan usage.
+ * Every sentence worth checking is recorded; the ones without a source stay visible as pending.
+ */
+export async function freeResearchScenes(scenes: ResearchScene[], onProgress: (pct: number, label: string) => void): Promise<SceneCheck[]> {
+  const unique = [...new Map(scenes.map((s) => [textKey(s.text), s.text.replace(/\s+/g, ' ').trim()])).entries()];
+  const cache = new Map<string, Awaited<ReturnType<typeof searchFree>>>();
+  const out: SceneCheck[] = new Array(unique.length);
+  let next = 0;
+  let done = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(3, unique.length) }, async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= unique.length) return;
+        const [key, text] = unique[i]!;
+        const claims = [];
+        for (const claim of splitClaims(text)) {
+          let hits = cache.get(claim);
+          if (!hits) cache.set(claim, (hits = await searchFree(claim)));
+          claims.push({ text: claim, sources: hits.map((h) => h.source) });
+        }
+        out[i] = { textKey: key, claims };
+        onProgress(Math.round((++done / unique.length) * 100), `Buscando en Wikipedia, OpenAlex y datos abiertos (${done}/${unique.length})`);
+      }
+    }),
+  );
+  return out;
 }
