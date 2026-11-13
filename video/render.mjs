@@ -6,9 +6,9 @@ import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { PRESETS, renderScale } from '@chp/core/presets';
 
-const [specPath, quality = 'draft', outArg] = process.argv.slice(2);
-if (!specPath || !['draft', 'final', 'still'].includes(quality)) {
-  console.error('Usage: render <spec.json> [draft|final|still] [out]');
+const [specPath, quality = 'draft', outArg, frameArg = '30'] = process.argv.slice(2);
+if (!specPath || !['draft', 'final', 'still', 'frame'].includes(quality)) {
+  console.error('Usage: render <spec.json> [draft|final|still|frame] [out] [frameNumber]');
   process.exit(1);
 }
 const spec = JSON.parse(readFileSync(specPath, 'utf8'));
@@ -22,7 +22,9 @@ const out = resolve(outArg ?? `out/${spec.preset}-${quality}.mp4`);
 // Run Remotion's CLI with this same Node (no npx/.cmd shims, so it behaves the same on Windows).
 const cli = join(dirname(createRequire(import.meta.url).resolve('@remotion/cli')), '..', 'remotion-cli.js');
 // quality "still" renders the Thumbnail composition to a PNG (props = { title, subtitle, theme }).
-const args = quality === 'still' ? [cli, 'still', 'src/index.ts', 'Thumbnail', out, `--props=${resolve(specPath)}`, '--image-format=png'] : [
+// quality "frame" renders one frame of the video (a style preview) as a small PNG.
+const args = quality === 'still' ? [cli, 'still', 'src/index.ts', 'Thumbnail', out, `--props=${resolve(specPath)}`, '--image-format=png']
+  : quality === 'frame' ? [cli, 'still', 'src/index.ts', 'Piece', out, `--props=${resolve(specPath)}`, `--frame=${Number(frameArg) || 30}`, '--scale=0.5', '--image-format=png'] : [
   cli, 'render', 'src/index.ts', 'Piece', out,
   `--props=${resolve(specPath)}`,
   `--scale=${renderScale(preset, quality)}`,

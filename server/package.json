@@ -8,10 +8,13 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "tsx": "^4.23.15",
-    "@chp/core": "*"
+    "@chp/core": "*",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
-    "@types/node": "^26.6.6"
+    "@types/node": "^26.6.6",
+    "@types/pngjs": "^6.0.5"
   }
 }

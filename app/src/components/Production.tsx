@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { z } from 'zod';
 import { PRESETS } from '@chp/core/presets';
-import { THEMES, scriptToScenes, toSpec, totalDuration } from '@chp/core/production';
+import { scriptToScenes, toSpec, totalDuration } from '@chp/core/production';
 import type { MetricsAnalysisOut, PublishCopyOut } from '@chp/core/schemas';
 import { api, getToken } from '../api.ts';
 import { useTask } from '../ai.ts';
 import { flushProject, presetOf, specKey, voiceOf, type Project } from '../project.ts';
+import { StyleSelector } from './StyleSelector.tsx';
 import { Verification } from './Verification.tsx';
 import { Head, PLATFORMS, Status, card, field, primary, type P } from './ui.tsx';
 
@@ -43,7 +44,7 @@ function useRender(onDone: (id: string) => void) {
     setErr('');
     try {
       await flushProject(); // the server checks sources against the saved project
-      setJob(await api<Job>('/api/render', { method: 'POST', json: { spec: toSpec(presetOf(project), project.production.scenes, project.production.themeIdx), quality, voice: voiceOf(project) } }));
+      setJob(await api<Job>('/api/render', { method: 'POST', json: { spec: toSpec(presetOf(project), project.production.scenes, project.production.themeIdx, project.production.style), quality, voice: voiceOf(project) } }));
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -124,11 +125,7 @@ export function StepProduction({ project, set }: P) {
       <p className={`text-xs ${preset && preset.maxSeconds && total > preset.maxSeconds ? 'text-amber-400' : 'text-slate-400'}`}>
         Duración total: {total} s{preset?.maxSeconds ? ` (máximo ${preset.maxSeconds} s para este formato)` : ''}
       </p>
-      <div className="flex gap-2" role="group" aria-label="Estilo">
-        {THEMES.map((t, i) => (
-          <button key={t.name} aria-pressed={prod.themeIdx === i} onClick={() => setProd({ themeIdx: i })} className={`rounded-xl border px-4 py-2 text-xs ${prod.themeIdx === i ? 'border-indigo-500' : 'border-slate-800'}`} style={{ background: t.bg, color: t.fg }}>{t.name}</button>
-        ))}
-      </div>
+      <StyleSelector project={project} set={set} />
       <Verification project={project} set={set} />
     </div>
   );

@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm as removeFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -14,9 +14,10 @@ import {
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
-import { isRenderId, renderFile, renderStatus, startRender } from './render.ts';
+import { isRenderId, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
 import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
+import { paletteFromFile } from './reference.ts';
 import { checkMany } from './verify.ts';
 import { getPackage, isPackageId, packageDir, startPackage, type PackageRequest } from './deliverables.ts';
 
@@ -253,6 +254,7 @@ const server = createServer(async (req, res) => {
     // these two read-only routes accept the session token as ?s=.
     const fm = url.pathname.match(/^\/api\/render\/([a-f0-9]{16})\/file$/);
     const am = url.pathname.match(/^\/api\/audio\/([a-f0-9]{40})\.wav$/);
+    const pv = url.pathname.match(/^\/api\/preview\/([a-f0-9]{16})\.png$/);
     const dm = url.pathname.match(/^\/api\/deliverable\/([a-f0-9]{16})\/([a-z0-9][a-z0-9._-]{0,80})$/);
     const rm2 = url.pathname.match(/^\/api\/sources\/([a-f0-9]{16})\/audio$/);
     if (rm2 && req.method === 'GET') {
@@ -267,6 +269,11 @@ const server = createServer(async (req, res) => {
         audioCache.set(rec.id, buf);
       }
       return sendBytes(req, res, buf, 'audio/mpeg');
+    }
+    if (pv && req.method === 'GET') {
+      if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
+      const file = join(DATA_DIR, 'renders', `${pv[1]}.png`);
+      return existsSync(file) ? sendFile(req, res, file, 'image/png') : json(res, 404, { error: 'Not found' });
     }
     if (dm && req.method === 'GET') {
       if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
@@ -359,10 +366,41 @@ const server = createServer(async (req, res) => {
     const vj = url.pathname.match(/^\/api\/verify\/([a-f0-9]{16})$/);
     if (vj && req.method === 'GET') return verifyJobs.has(vj[1]!) ? json(res, 200, verifyJobs.get(vj[1]!)) : json(res, 404, { error: 'Not found' });
 
+    // --- visual style: preview frame and palette from a reference ---
+    if (url.pathname === '/api/preview/frame' && req.method === 'POST') {
+      const b = await readBody(req);
+      const spec = VideoSpec.safeParse(b.spec);
+      if (!spec.success) return json(res, 400, { error: 'Vista previa inválida' });
+      const id = randomBytes(8).toString('hex');
+      try {
+        await renderFrame({ ...spec.data, scenes: spec.data.scenes.slice(0, 1).map(({ text, durationSec }) => ({ text, durationSec, speechSec: Math.min(durationSec - 0.5, 4) })) }, join(DATA_DIR, 'renders', `${id}.png`), DATA_DIR, ROOT);
+        return json(res, 200, { url: `/api/preview/${id}.png` });
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo generar la vista previa' });
+      }
+    }
+    if (url.pathname === '/api/style/reference' && req.method === 'PUT') {
+      const name = basename(String(url.searchParams.get('name') ?? 'referencia'));
+      if (!/\.(png|jpe?g|webp|gif|mp4|mov|mkv|webm)$/i.test(name)) return json(res, 400, { error: 'Sube una imagen o un video (png, jpg, webp, mp4, mov, webm)' });
+      if (Number(req.headers['content-length'] ?? 0) > 300 * 1024 * 1024) return json(res, 413, { error: 'Archivo demasiado grande (máx. 300 MB)' });
+      const tmp = join(DATA_DIR, 'tmp');
+      await mkdir(tmp, { recursive: true });
+      const id = randomBytes(6).toString('hex');
+      const file = join(tmp, `ref-${id}${extname(name).toLowerCase()}`);
+      try {
+        await pipeline(req, createWriteStream(file));
+        return json(res, 200, { palette: await paletteFromFile(file, tmp, id) });
+      } catch {
+        return json(res, 422, { error: 'No pude leer ese archivo como imagen o video' });
+      } finally {
+        await removeFile(file, { force: true });
+      }
+    }
+
     // --- deliverables: the person ticks what to produce ---
     if (url.pathname === '/api/deliverables' && req.method === 'POST') {
       const b = await readBody(req);
-      const base = VideoSpec.safeParse({ preset: 'youtube_long', scenes: (b.scenes ?? []).map((x: { text: string; durationSec: number }) => ({ text: x.text, durationSec: x.durationSec })), theme: b.theme });
+      const base = VideoSpec.safeParse({ preset: 'youtube_long', scenes: (b.scenes ?? []).map((x: { text: string; durationSec: number }) => ({ text: x.text, durationSec: x.durationSec })), theme: b.theme, style: b.style });
       if (!base.success || !Array.isArray(b.items)) return json(res, 400, { error: 'Solicitud de entregables inválida' });
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       const baseScenes = base.data.scenes.map(({ text, durationSec }) => ({ text, durationSec }));
@@ -371,7 +409,7 @@ const server = createServer(async (req, res) => {
       const credits = creditsFrom(baseScenes, projectChecks(s));
       const request: PackageRequest = {
         card: credits.sources.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
-        items: b.items, scenes: base.data.scenes.map(({ text, durationSec }) => ({ text, durationSec })), theme: base.data.theme,
+        items: b.items, scenes: base.data.scenes.map(({ text, durationSec }) => ({ text, durationSec })), theme: base.data.theme, style: base.data.style,
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
         summary: String(b.summary ?? '').slice(0, 3000),

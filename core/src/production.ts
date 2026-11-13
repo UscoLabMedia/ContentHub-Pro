@@ -1,6 +1,7 @@
 // Script -> video scenes, entirely local (zero tokens). Also platform -> preset mapping and themes.
 import { PRESETS } from './presets.ts';
 import type { PlatformId, VideoSpec } from './schemas.ts';
+import { validPalette, type StyleProfile } from './style.ts';
 
 export interface Scene {
   text: string;
@@ -51,7 +52,8 @@ export function scriptToScenes(script: string): Scene[] {
 
 export const totalDuration = (scenes: Scene[]): number => scenes.reduce((s, x) => s + x.durationSec, 0);
 
-export function toSpec(presetId: string, scenes: Scene[], themeIdx = 0): VideoSpec {
+export function toSpec(presetId: string, scenes: Scene[], themeIdx = 0, style?: StyleProfile): VideoSpec {
+  if (style) return { preset: presetId, scenes, theme: { bg: style.palette.bg, fg: style.palette.fg, accent: style.palette.accent }, style };
   const t = THEMES[themeIdx] ?? THEMES[0];
   return { preset: presetId, scenes, theme: { bg: t.bg, fg: t.fg, accent: t.accent } };
 }
@@ -66,6 +68,7 @@ export function validateSpec(spec: VideoSpec): string | null {
   // Narration audio is only ever added by the local server, pointing at its own audio endpoint.
   const audio = /^http:\/\/127\.0\.0\.1:\d{2,5}\/api\/audio\/[a-f0-9]{40}\.wav\?s=[a-f0-9]{64}$/;
   if (spec.scenes.some((s) => s.audioUrl !== undefined && !audio.test(s.audioUrl))) return 'Audio inválido';
+  if (spec.style && !validPalette(spec.style.palette)) return 'Colores de estilo inválidos';
   const hex = /^#[0-9a-fA-F]{6}$/;
   if (spec.theme && !(hex.test(spec.theme.bg) && hex.test(spec.theme.fg) && hex.test(spec.theme.accent))) return 'Colores inválidos';
   return null;

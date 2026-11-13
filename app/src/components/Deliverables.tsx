@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DELIVERABLES, rangeSeconds, splitShortRanges, validateShorts, SHORT_MAX_SEC, type DeliverableId, type ShortRange } from '@chp/core/deliverables';
-import { THEMES, toSpec, totalDuration } from '@chp/core/production';
+import { toSpec, totalDuration } from '@chp/core/production';
 import { api, getToken } from '../api.ts';
 import { flushProject, presetOf, specKey, voiceOf, type Project } from '../project.ts';
 import { Head, field, primary, type P } from './ui.tsx';
@@ -63,13 +63,14 @@ export function StepDeliverables({ project, set }: P) {
   const generate = async () => {
     setErr('');
     const copy = project.publish.copy?.[0];
-    const theme = THEMES[project.production.themeIdx] ?? THEMES[0];
+    const style = project.production.style;
+    const theme = { bg: style.palette.bg, fg: style.palette.fg, accent: style.palette.accent };
     try {
       await flushProject();
       setJob(await api<PkgJob>('/api/deliverables', {
         method: 'POST',
         json: {
-          items: d.selected, scenes, theme: { bg: theme.bg, fg: theme.fg, accent: theme.accent }, shorts,
+          items: d.selected, scenes, theme, style, shorts,
           title: d.thumbTitle || project.topic, summary: d.summary || lineAfter(project.script.text, 'CAPTION:') || project.topic,
           sources: [...project.topicEvidence, ...(project.source ? [{ source: `Archivo propio: ${project.source.name}` }] : [])],
           hashtags: copy?.hashtags ?? [], voice: voiceOf(project),
@@ -86,7 +87,7 @@ export function StepDeliverables({ project, set }: P) {
   const total = totalDuration(scenes);
 
   const setShort = (i: number, patch: Partial<ShortRange>) => setD({ shorts: shorts.map((r, k) => (k === i ? { ...r, ...patch } : r)) });
-  const preset = toSpec(presetOf(project), scenes, project.production.themeIdx).preset;
+  const preset = toSpec(presetOf(project), scenes, project.production.themeIdx, project.production.style).preset;
 
   return (
     <div className="space-y-5">
