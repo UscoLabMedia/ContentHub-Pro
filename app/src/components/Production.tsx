@@ -7,6 +7,7 @@ import { api, getToken } from '../api.ts';
 import { useTask } from '../ai.ts';
 import { flushProject, presetOf, specKey, voiceOf, type Project } from '../project.ts';
 import { StyleSelector } from './StyleSelector.tsx';
+import { Illustrations } from './Illustrations.tsx';
 import { Verification } from './Verification.tsx';
 import { Head, PLATFORMS, Status, card, field, primary, type P } from './ui.tsx';
 
@@ -126,6 +127,7 @@ export function StepProduction({ project, set }: P) {
         Duración total: {total} s{preset?.maxSeconds ? ` (máximo ${preset.maxSeconds} s para este formato)` : ''}
       </p>
       <StyleSelector project={project} set={set} />
+      <Illustrations project={project} set={set} />
       <Verification project={project} set={set} />
     </div>
   );

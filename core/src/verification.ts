@@ -72,6 +72,8 @@ export function gate(scenes: { text: string }[], checks: Record<string, SceneChe
 export interface Credits {
   sources: { title: string; url: string }[];
   calcs: string[];
+  /** Credit lines for CC BY images (set by the caller; see artCredits). */
+  images?: string[];
 }
 
 /** Unique verified sources and own calculations of the scenes being delivered. */
@@ -107,6 +109,8 @@ export function creditCardText(c: Credits, max = 7): string {
   const names = [...new Set(c.sources.map((s) => (s.title.length > 46 ? `${s.title.slice(0, 44)}…` : s.title)))];
   const lines = names.slice(0, max);
   if (names.length > max) lines.push(`y ${names.length - max} más (ver descripción)`);
+  const imgs = (c.images ?? []).slice(0, 4);
+  if (imgs.length) lines.push('Imágenes:', ...imgs);
   return `Fuentes\n${lines.join('\n')}`;
 }
 

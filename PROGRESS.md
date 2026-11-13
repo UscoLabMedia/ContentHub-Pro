@@ -1,6 +1,6 @@
 # PROGRESS
 
-Estado del proyecto. Rama vigente de la pila: **`feat/reference-analysis`** (PR #8). Actualizar en cada PR.
+Estado del proyecto. Rama vigente de la pila: **`feat/illustrations`** (PR #9). Actualizar en cada PR.
 
 ## Pila de PRs (fusionar en este orden; cada uno apunta al anterior)
 
@@ -14,6 +14,7 @@ Estado del proyecto. Rama vigente de la pila: **`feat/reference-analysis`** (PR 
 | #6 | `feat/free-source-search` | Búsqueda gratuita (Wikipedia, OpenAlex, datos abiertos) antes de IA | abierto |
 | #7 | `feat/visual-engine` | Motor visual parte 1: cámara, capas, karaoke, números gigantes, estilos | abierto |
 | #8 | `feat/reference-analysis` | Estilo desde video de referencia: análisis local + «Afinar con IA» | abierto |
+| #9 | `feat/illustrations` | Ilustraciones por escena: búsqueda libre (PD/CC0/CC BY) → SVG de Claude; créditos | abierto |
 
 ## Decisiones tomadas (no volver a preguntar)
 
@@ -21,12 +22,14 @@ Estado del proyecto. Rama vigente de la pila: **`feat/reference-analysis`** (PR 
 - Revisión de transcripción: solo los tramos elegidos. Entregables: todas las opciones, seleccionables.
 - Verificación: búsqueda gratis primero, IA solo para lo pendiente; sin buscador con clave; el render se bloquea con escenas pendientes.
 - Motor visual: ambos (catálogo de ilustraciones + a medida con Claude Code). Música: catálogo curado + archivos propios.
+- Ilustraciones (motor visual parte 2): sin catálogo fijo; surgen del estilo y del tema de cada escena. Primero búsqueda web gratuita de imágenes libres (Openverse, Wikimedia Commons, Openclipart; solo dominio público, CC0 y CC-BY, con crédito en pantalla final y descripción); si no hay resultado, Claude dibuja un SVG animado con la paleta del estilo. Criterio: lo que gaste menos tokens (búsqueda local primero; la IA solo para dibujar). La IA elige por etiquetas, una consulta por guion.
 - Resolución máxima 1080p. Sin módulo de presupuesto. IA vía cuenta de Claude Code.
 - El usuario aprueba cada fase con preguntas antes de cambiar nada y revisa por PR. Suele estar en el celular: enviar fotogramas o video corto.
 
 ## Pendiente
 
-- Motor visual parte 2: catálogo de ilustraciones animadas (la IA elige por escena) + a medida. Preguntar diseño antes.
+- Subtítulos desde una referencia (pedido del usuario): subir video/imagen de referencia, identificar tipografía y animación del subtítulo y no repetir siempre el mismo estilo. Preguntar diseño antes (tipografías libres tipo Google Fonts, detección local vs IA, variantes).
+- Ilustraciones: probar búsqueda real en Openverse/Commons (sin red en la sesión; solo probado con fixture local).
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
 - Voz en línea (JorgeNeural) con tiempos por palabra para mejor karaoke; revisar la librería con el usuario.
 - Menores: carruseles de Instagram, cortes de podcast, publicación automática.

@@ -11,7 +11,7 @@ import {
 } from '@chp/core';
 import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
 import { checkSource } from './verify.ts';
-import { searchFree } from '@chp/core';
+import { searchArt, searchFree } from '@chp/core';
 
 export type Status = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skip';
 export interface CheckResult {
@@ -111,6 +111,11 @@ export const CHECKS: Check[] = [
     const hits = await searchFree('El sistema GPS cuenta con 24 satélites operativos en órbita');
     if (!hits.length) throw new Warn('No encontró fuentes para una frase de prueba: puede que Wikipedia/OpenAlex estén bloqueados o sin respuesta');
     return `Encontró ${hits.length} fuente(s), por ejemplo: ${hits[0]!.source.title}`;
+  } },
+  { id: 'art', label: 'Ilustraciones libres (Openverse y Wikimedia Commons)', group: 'Datos', run: async () => {
+    const hits = await searchArt('satellite');
+    if (!hits.length) throw new Warn('No encontró imágenes de prueba: puede que Openverse/Commons estén bloqueados; aún puedes dibujar con IA');
+    return `Encontró ${hits.length} imagen(es) libres, por ejemplo «${hits[0]!.title}» (${hits[0]!.licenseLabel})`;
   } },
   { id: 'ffmpeg', label: 'Audio/video: ffmpeg (incluido en Remotion)', group: 'Video', run: async (c) => {
     const dir = await mkdtemp(join(tmpdir(), 'chp-ff-'));

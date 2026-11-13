@@ -14,7 +14,7 @@ export interface PageResult {
 /** CHP_VERIFY_ALLOW_LOCAL=1 lets tests read pages from 127.0.0.1; it must never be set for normal use. */
 const allowLocal = () => process.env.CHP_VERIFY_ALLOW_LOCAL === '1';
 
-async function assertPublic(host: string): Promise<void> {
+export async function assertPublic(host: string): Promise<void> {
   if (allowLocal()) return;
   const addrs = await lookup(host, { all: true }).catch(() => []);
   if (!addrs.length) throw new Error('No se pudo resolver el sitio');

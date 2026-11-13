@@ -1,7 +1,7 @@
 import { AbsoluteFill, Audio, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { VideoSpec } from '@chp/core/schemas';
 import { DEFAULT_STYLE, heroNumber, type StyleProfile } from '@chp/core/style';
-import { Background, Hero, Karaoke, Motif, Particles, camTransform, camera } from './visual.tsx';
+import { Art, Background, Hero, Karaoke, Motif, Particles, camTransform, camera } from './visual.tsx';
 
 const styleOf = (spec: VideoSpec): StyleProfile => {
   if (spec.style) return spec.style as StyleProfile;
@@ -43,6 +43,7 @@ const Scene = ({ scene, index, style }: { scene: VideoSpec['scenes'][number]; in
       <div style={{ position: 'absolute', inset: 0, transform: camTransform(cam, 1.5) }}>
         <Motif style={style} frame={frame} index={index} width={width} height={height} />
       </div>
+      {scene.art && <Art art={scene.art} style={style} frame={frame} fps={fps} width={width} height={height} hasHero={!!hero} />}
       {hero && <Hero hero={hero} style={style} frame={frame} fps={fps} width={width} height={height} />}
       <Particles style={style} frame={frame} index={index + 7} width={width} height={height} />
       <Karaoke text={scene.text} style={style} frame={frame} fps={fps} speechSec={scene.speechSec} durationSec={scene.durationSec} width={width} height={height} />
