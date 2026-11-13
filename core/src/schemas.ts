@@ -51,6 +51,26 @@ export const MetricsAnalysisOut = z.object({
   nextIdeas: z.array(z.string()),
 });
 
+export const HighlightsOut = z.object({
+  highlights: z.array(z.object({ startSec: z.number(), endSec: z.number(), point: z.string() })),
+});
+
+export const SourceIdeasOut = z.object({
+  summary: z.string(),
+  ideas: z.array(
+    z.object({
+      title: z.string(),
+      platform: PlatformId,
+      format: z.string(),
+      hook: z.string(),
+      startSec: z.number(),
+      endSec: z.number(),
+      why: z.string(),
+    }),
+  ),
+});
+export type SourceIdea = z.infer<typeof SourceIdeasOut>['ideas'][number];
+
 /** Input of the Remotion template; built locally from a script (zero tokens). */
 export const VideoSpec = z.object({
   preset: z.string(),
@@ -67,4 +87,6 @@ export const OUTPUT_SCHEMAS = {
   formats: FormatsOut,
   script: ScriptOut,
   metricsAnalysis: MetricsAnalysisOut,
+  sourceHighlights: HighlightsOut,
+  contentIdeas: SourceIdeasOut,
 } as const;

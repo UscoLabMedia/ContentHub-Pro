@@ -7,6 +7,8 @@ export interface Project {
   audience: { scale: string; anchor: string; notes: string };
   platforms: string[];
   script: { choice: number; text: string };
+  /** Set when the idea came from one of the user's own files (podcast, video, text). */
+  source: { id: string; name: string; startSec: number; endSec: number; hook: string } | null;
 }
 
 export const EMPTY_PROJECT: Project = {
@@ -15,6 +17,7 @@ export const EMPTY_PROJECT: Project = {
   audience: { scale: 'local', anchor: 'Jóvenes universitarios en el Huila', notes: '' },
   platforms: [],
   script: { choice: 0, text: '' },
+  source: null,
 };
 
 /** Project state saved (encrypted) in the vault, debounced. */

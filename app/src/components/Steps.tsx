@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { z } from 'zod';
 import type { AudienceOut, FormatsOut, ScriptOut, TrendsOut, TreatmentOut } from '@chp/core/schemas';
+import { api } from '../api.ts';
 import { useTask, type AiState } from '../ai.ts';
+import { Sources } from './Sources.tsx';
 import type { Project } from '../project.ts';
 
 type P = { project: Project; set: (p: Project) => void };
@@ -26,8 +28,6 @@ function Head({ n, title, hint }: { n: number; title: string; hint: string }) {
 
 function Status({ s }: { s: AiState<unknown> }) {
   if (s.status === 'loading') return <p className="text-sm text-slate-400" role="status">Generando…</p>;
-  if (s.status === 'queued')
-    return <p className="text-sm text-amber-400" role="status">Tope de gasto alcanzado. Se reanuda solo a las {new Date(s.resumeAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}; puedes seguir trabajando en otra cosa.</p>;
   if (s.status === 'error') return <p className="text-sm text-rose-400" role="alert">{s.message}</p>;
   if (s.status === 'ok' && s.cached) return <p className="text-xs text-slate-500">Respuesta guardada (sin costo).</p>;
   return null;
@@ -38,26 +38,51 @@ const platformIds = (ids: string[]) => ids.join(', ');
 export function Step1({ project, set }: P) {
   const t = useTask<z.infer<typeof TrendsOut>>('trends');
   const [signals, setSignals] = useState('');
+  const [tab, setTab] = useState<'trends' | 'files'>(project.source ? 'files' : 'trends');
+  const tabBtn = (id: 'trends' | 'files', label: string) => (
+    <button role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === id ? 'bg-indigo-600' : 'border border-slate-700 hover:bg-slate-800'}`}>{label}</button>
+  );
   return (
     <div className="space-y-5">
-      <Head n={1} title="Radar de tendencias" hint="Pega titulares o temas del momento (opcional) y la IA propone 5 temas. Son sugerencias, no datos medidos. O escribe tu propio tema." />
-      <textarea rows={3} value={signals} onChange={(e) => setSignals(e.target.value)} placeholder="Titulares o temas de hoy (uno por línea)…" aria-label="Señales" className={field} />
-      <button className={primary} disabled={t.state.status === 'loading'} onClick={() => void t.run({ region: 'Huila, Colombia', signals: signals.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 15) })}>Buscar tendencias</button>
-      <Status s={t.state} />
-      {t.state.status === 'ok' && (
-        <div className="space-y-2">
-          {t.state.data.trends.map((x) => (
-            <button key={x.title} className={card(project.topic === x.title)} onClick={() => set({ ...project, topic: x.title, treatment: '' })}>
-              <div className="flex items-center gap-2 text-xs"><span className="rounded bg-indigo-500/20 px-2 py-0.5 text-indigo-300">potencial {x.virality}/10 (estimado)</span></div>
-              <p className="mt-1 text-sm font-semibold">{x.title}</p>
-              <p className="text-xs text-slate-400">{x.context}</p>
-            </button>
-          ))}
-        </div>
+      <Head n={1} title="Punto de partida" hint="Empieza desde una tendencia o desde tus propios archivos (por ejemplo, un podcast completo)." />
+      <div role="tablist" className="flex gap-2">{tabBtn('trends', 'Tendencias')}{tabBtn('files', 'Desde mis archivos')}</div>
+
+      {tab === 'files' ? (
+        <Sources
+          selected={project.topic}
+          onPick={(idea, src) =>
+            set({
+              ...project,
+              topic: idea.title,
+              treatment: '',
+              platforms: project.platforms.includes(idea.platform) ? project.platforms : [...project.platforms, idea.platform],
+              source: { id: src.id, name: src.name, startSec: idea.startSec, endSec: idea.endSec, hook: idea.hook },
+            })
+          }
+        />
+      ) : (
+        <>
+          <p className="text-sm text-slate-400">Pega titulares o temas del momento (opcional) y la IA propone 5 temas. Son sugerencias, no datos medidos.</p>
+          <textarea rows={3} value={signals} onChange={(e) => setSignals(e.target.value)} placeholder="Titulares o temas de hoy (uno por línea)…" aria-label="Señales" className={field} />
+          <button className={primary} disabled={t.state.status === 'loading'} onClick={() => void t.run({ region: 'Huila, Colombia', signals: signals.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 15) })}>Buscar tendencias</button>
+          <Status s={t.state} />
+          {t.state.status === 'ok' && (
+            <div className="space-y-2">
+              {t.state.data.trends.map((x) => (
+                <button key={x.title} className={card(project.topic === x.title)} onClick={() => set({ ...project, topic: x.title, treatment: '', source: null })}>
+                  <div className="flex items-center gap-2 text-xs"><span className="rounded bg-indigo-500/20 px-2 py-0.5 text-indigo-300">potencial {x.virality}/10 (estimado)</span></div>
+                  <p className="mt-1 text-sm font-semibold">{x.title}</p>
+                  <p className="text-xs text-slate-400">{x.context}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
       <label className="block text-xs font-semibold text-slate-300">Tema elegido (editable)
         <input value={project.topic} onChange={(e) => set({ ...project, topic: e.target.value })} className={`${field} mt-1`} placeholder="Ej. El impacto de la cultura cafetera en el Huila" />
       </label>
+      {project.source && <p className="text-xs text-emerald-400">Basado en: {project.source.name}</p>}
     </div>
   );
 }
@@ -141,10 +166,17 @@ const scriptToText = (o: Script) => [`GANCHO: ${o.hook}`, ...o.beats.map((b) => 
 
 export function Step5({ project, set }: P) {
   const t = useTask<z.infer<typeof ScriptOut>>('script');
+  const generate = async () => {
+    // When the idea came from the user's own file, give the model the real passage (bounded server-side).
+    let sourceExcerpt: string | undefined;
+    const src = project.source;
+    if (src) sourceExcerpt = (await api<{ text: string }>(`/api/sources/${src.id}/excerpt?start=${src.startSec}&end=${src.endSec}`).catch(() => ({ text: '' }))).text || undefined;
+    await t.run({ topic: project.topic, treatment: project.treatment, anchor: project.audience.anchor, platforms: project.platforms, sourceHook: src?.hook, sourceExcerpt });
+  };
   return (
     <div className="space-y-5">
       <Head n={5} title="Guiones y copys" hint="Dos opciones; elige una y ajústala. Este texto alimentará la producción de video." />
-      <button className={primary} disabled={t.state.status === 'loading'} onClick={() => void t.run({ topic: project.topic, treatment: project.treatment, anchor: project.audience.anchor, platforms: project.platforms })}>Generar guiones</button>
+      <button className={primary} disabled={t.state.status === 'loading'} onClick={() => void generate()}>Generar guiones</button>
       <Status s={t.state} />
       {t.state.status === 'ok' && (
         <div className="grid gap-3 md:grid-cols-2">

@@ -19,4 +19,8 @@ export const TASK_PROMPTS: Record<Task, string> = {
     'Escribe 2 opciones de guion (A dinámico/retención, B analítico/guardable). Cada una: gancho 0-3s, beats con tiempo, visual y texto, CTA y caption. Respeta la duración pedida.',
   metricsAnalysis:
     'Recibes un resumen ya calculado de métricas (no datos crudos). Explica qué funcionó, qué cambiar y 3 ideas siguientes. Usa solo cifras del resumen.',
+  sourceHighlights:
+    'Recibes un fragmento de transcripción con marcas [mm:ss]. Extrae máximo 6 momentos con valor propio (afirmaciones fuertes, historias, datos, preguntas). startSec/endSec en segundos según las marcas. point: una frase.',
+  contentIdeas:
+    'Recibes la transcripción (o los momentos clave) de un archivo del creador, con marcas [mm:ss] o [h:mm:ss]. Resume en 2 frases y propón de 6 a 8 piezas de contenido distintas. Cada una: plataforma (tiktok, instagram, facebook, youtube_short, youtube_long, spotify), formato, gancho de una línea, startSec/endSec del tramo fuente (0 si no hay tiempos) y por qué funciona. Prioriza momentos con gancho propio. No inventes nada que no esté en el material.',
 };

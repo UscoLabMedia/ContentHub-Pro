@@ -7,7 +7,7 @@ export interface IngestInput {
   bytes: Uint8Array;
 }
 
-async function pdfText(bytes: Uint8Array): Promise<string> {
+export async function pdfToText(bytes: Uint8Array): Promise<string> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: true }).promise;
   const parts: string[] = [];
@@ -41,7 +41,7 @@ export async function ingestFile(file: IngestInput): Promise<Digest> {
     });
     return buildDigest(file.name, rowsFromRecords(parsed.data));
   }
-  if (ext === 'pdf') return buildDigest(file.name, [rowFromText(await pdfText(file.bytes))]);
+  if (ext === 'pdf') return buildDigest(file.name, [rowFromText(await pdfToText(file.bytes))]);
   if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) return buildDigest(file.name, [rowFromText(await imageText(file.bytes))]);
   throw new Error(`Unsupported file type: .${ext}`);
 }

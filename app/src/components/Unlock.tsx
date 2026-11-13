@@ -4,7 +4,7 @@ import { api, setToken } from '../api.ts';
 type Mode = 'unlock' | 'create' | 'recover' | 'showKey';
 const field = 'w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm';
 
-export function Unlock({ vaultExists, onDone }: { vaultExists: boolean; onDone: () => void }) {
+export function Unlock({ vaultExists, onDone, onVaultImported }: { vaultExists: boolean; onDone: () => void; onVaultImported?: () => void }) {
   const [mode, setMode] = useState<Mode>(vaultExists ? 'unlock' : 'create');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
@@ -33,6 +33,18 @@ export function Unlock({ vaultExists, onDone }: { vaultExists: boolean; onDone: 
       });
       setToken(r.token);
       onDone();
+    } catch (x) {
+      setErr((x as Error).message);
+    }
+  };
+
+  const importVault = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      await api('/api/vault/import', { method: 'POST', body: await file.text() });
+      setMode('unlock');
+      setErr('');
+      onVaultImported?.();
     } catch (x) {
       setErr((x as Error).message);
     }
@@ -83,6 +95,12 @@ export function Unlock({ vaultExists, onDone }: { vaultExists: boolean; onDone: 
       <button className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500">{title}</button>
       {vaultExists && mode === 'unlock' && (
         <button type="button" onClick={() => setMode('recover')} className="w-full text-center text-xs text-slate-400 underline">Olvidé mi contraseña</button>
+      )}
+      {!vaultExists && mode === 'create' && (
+        <label className="block cursor-pointer text-center text-xs text-slate-400 underline">
+          Ya tengo una bóveda de otro PC (importar)
+          <input type="file" accept=".enc,application/json" className="hidden" onChange={(e) => void importVault(e.target.files?.[0])} />
+        </label>
       )}
       {mode === 'recover' && (
         <button type="button" onClick={() => setMode('unlock')} className="w-full text-center text-xs text-slate-400 underline">Volver</button>

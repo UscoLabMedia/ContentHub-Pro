@@ -1,14 +1,9 @@
 // Model routing: the cheapest model that does the job. Opus is never auto-selected.
 export type ModelId = 'claude-haiku-5-5' | 'claude-sonnet-5-5' | 'claude-opus-5-5';
-export type Task = 'trends' | 'treatment' | 'audience' | 'formats' | 'script' | 'metricsAnalysis';
+export type Task =
+  | 'trends' | 'treatment' | 'audience' | 'formats' | 'script' | 'metricsAnalysis'
+  | 'sourceHighlights' | 'contentIdeas';
 export type Effort = 'low' | 'medium' | 'high';
-
-/** USD per 1M tokens (standard rates). Review when pricing changes. */
-export const PRICING: Record<ModelId, { in: number; out: number }> = {
-  'claude-haiku-5-5': { in: 0.1, out: 0.5 },
-  'claude-sonnet-5-5': { in: 2, out: 10 },
-  'claude-opus-5-5': { in: 4, out: 20 },
-};
 
 export interface Route {
   model: ModelId;
@@ -23,6 +18,9 @@ export const ROUTES: Record<Task, Route> = {
   formats: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 900 },
   script: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 2500 },
   metricsAnalysis: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 1500 },
+  // Long-source work: map step on the cheap model, final ideas on Sonnet.
+  sourceHighlights: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 1500 },
+  contentIdeas: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 3000 },
 };
 
 export interface Usage {
@@ -30,16 +28,4 @@ export interface Usage {
   output_tokens: number;
   cache_read_input_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
-}
-
-export function costUsd(model: ModelId, u: Usage): number {
-  const p = PRICING[model];
-  const per = 1_000_000;
-  return (
-    (u.input_tokens * p.in +
-      (u.cache_read_input_tokens ?? 0) * p.in * 0.1 +
-      (u.cache_creation_input_tokens ?? 0) * p.in * 1.25 +
-      u.output_tokens * p.out) /
-    per
-  );
 }

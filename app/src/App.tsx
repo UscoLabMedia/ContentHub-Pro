@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { api } from './api.ts';
+import { api, type EngineView } from './api.ts';
 import { STEPS } from './steps.ts';
 import { useProject } from './project.ts';
-import { BudgetBar } from './components/BudgetBar.tsx';
+import { EditCode } from './components/EditCode.tsx';
 import { Settings } from './components/Settings.tsx';
 import { STEP_COMPONENTS, canAdvance } from './components/Steps.tsx';
 import { Unlock } from './components/Unlock.tsx';
@@ -16,8 +16,17 @@ function Workspace() {
   const [project, setProject] = useProject();
   const [step, setStep] = useState(1);
   const [settings, setSettings] = useState(false);
+  const [editCode, setEditCode] = useState(false);
   const [tick, setTick] = useState(0);
+  const [engine, setEngine] = useState<EngineView | null>(null);
+  useEffect(() => {
+    const load = () => api<EngineView>('/api/engine').then(setEngine).catch(() => {});
+    void load();
+    const id = setInterval(load, 20_000);
+    return () => clearInterval(id);
+  }, [tick]);
   if (!project) return null;
+  const connected = engine?.ready && (engine.engine === 'api' || engine.claude.loggedIn);
 
   const Current = STEP_COMPONENTS[step - 1];
   const reach = (n: number) => n === 1 || Array.from({ length: n - 1 }, (_, i) => i + 1).every((s) => canAdvance(s, project));
@@ -27,7 +36,10 @@ function Workspace() {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3">
         <h1 className="font-bold">ContentHub Pro</h1>
         <div className="flex flex-wrap items-center gap-4">
-          <BudgetBar refreshKey={tick} />
+          <button onClick={() => setSettings(true)} title="Motor de IA" className={`rounded-full border px-3 py-1 text-xs ${connected ? 'border-emerald-500/40 text-emerald-400' : 'border-amber-500/40 text-amber-300'}`}>
+            {connected ? (engine?.engine === 'api' ? 'IA: clave de API' : 'IA: Claude Code conectado') : 'IA: sin conectar'}
+          </button>
+          <button onClick={() => setEditCode(true)} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-800">Editar con Claude Code</button>
           <button onClick={() => setSettings(true)} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-800">Ajustes</button>
         </div>
       </header>
@@ -54,6 +66,7 @@ function Workspace() {
         <span className="text-xs text-slate-400">Paso {step} de 10</span>
         <button disabled={step >= 5 || !canAdvance(step, project)} onClick={() => setStep(step + 1)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium disabled:opacity-40">Siguiente</button>
       </footer>
+      {editCode && <EditCode onClose={() => setEditCode(false)} />}
       {settings && <Settings onClose={() => setSettings(false)} onChanged={() => setTick((t) => t + 1)} />}
     </div>
   );
@@ -65,6 +78,7 @@ export function App() {
     api<Status>('/api/status').then(setState).catch(() => setState({ vaultExists: false, unlocked: false }));
   }, []);
   if (!state) return null;
-  if (!state.unlocked) return <Unlock vaultExists={state.vaultExists} onDone={() => setState({ ...state, unlocked: true })} />;
+  if (!state.unlocked)
+    return <Unlock vaultExists={state.vaultExists} onDone={() => setState({ ...state, unlocked: true })} onVaultImported={() => setState({ ...state, vaultExists: true })} />;
   return <Workspace />;
 }

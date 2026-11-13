@@ -59,6 +59,13 @@ if (!existsSync(join(root, 'node_modules')) || changed) {
   if (run(npm, [existsSync(join(root, 'package-lock.json')) ? 'ci' : 'install']).status !== 0) process.exit(1);
 }
 
+// Claude Code powers the AI with your own account (no API key). Install it automatically if missing.
+if (spawnSync('claude', ['--version'], { stdio: 'ignore', shell: win }).status !== 0) {
+  say('Instalando Claude Code (solo la primera vez)…');
+  const r = run(npm, ['install', '-g', '@anthropic-ai/claude-code']);
+  if (r.status !== 0) console.log('No pude instalar Claude Code automáticamente; podrás usar una clave de API desde Ajustes.');
+}
+
 const newest = (dir) =>
   readdirSync(dir, { withFileTypes: true }).reduce((m, e) => {
     const p = join(dir, e.name);

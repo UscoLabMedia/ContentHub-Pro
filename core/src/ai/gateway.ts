@@ -1,20 +1,16 @@
 // Single entry point for every AI call. Enforces, automatically and without options to skip:
-// schema-validated JSON output, per-task model + effort + max_tokens, encrypted response cache,
-// budget check BEFORE the call (queue until the window renews), and real-usage accounting.
+// schema-validated JSON output, per-task model + effort + max_tokens, and an encrypted response cache
+// (repeating a request costs nothing). Works with either engine (Claude Code account or API key).
 import type { z } from 'zod';
 import type { KeyValueStore } from '../crypto/vault.ts';
-import { BudgetMeter } from '../budget/meter.ts';
-import { TaskQueue } from '../budget/queue.ts';
-import { ROUTES, costUsd, type Task } from '../models.ts';
+import { ROUTES, type Task } from '../models.ts';
 import { OUTPUT_SCHEMAS } from '../schemas.ts';
 import { SHARED_SYSTEM, TASK_PROMPTS } from './prompts.ts';
 import type { LlmClient } from './client.ts';
 
 export class RefusalError extends Error {}
 
-export type GatewayResult<T> =
-  | { status: 'ok'; data: T; cached: boolean; usd: number }
-  | { status: 'queued'; id: string; resumeAt: number | null; reason: string };
+export type GatewayResult<T> = { status: 'ok'; data: T; cached: boolean };
 
 interface CacheEntry {
   t: number;
@@ -23,20 +19,24 @@ interface CacheEntry {
 const CACHE_KEY = 'ai-cache';
 const CACHE_MAX = 200;
 const CACHE_TTL = 30 * 86_400_000;
-const RETRY_429_MS = 60_000;
+const RETRY_DELAYS_MS = [15_000, 45_000]; // rate limit / overload: wait and retry, never fail silently
 
 async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Buffer.from(buf).toString('hex');
 }
 
+const isRetryable = (e: unknown) => {
+  const s = (e as { status?: number }).status;
+  return s === 429 || s === 529 || /rate limit|overloaded/i.test((e as Error)?.message ?? '');
+};
+
 export interface GatewayDeps {
   llm: LlmClient;
-  meter: BudgetMeter;
-  queue: TaskQueue;
   store: KeyValueStore;
   persist: () => Promise<void>;
   now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export class Gateway {
@@ -52,25 +52,21 @@ export class Gateway {
     const key = await sha256(`${task}|${route.model}|${user}`);
     const cache = this.d.store.get<Record<string, CacheEntry>>(CACHE_KEY) ?? {};
     const hit = cache[key];
-    if (hit && this.now() - hit.t < CACHE_TTL) return { status: 'ok', data: hit.data as Out, cached: true, usd: 0 };
-
-    // Upper-bound estimate: ~3 chars/token input, full max_tokens output.
-    const estUsd = costUsd(route.model, { input_tokens: Math.ceil((system.length + user.length) / 3), output_tokens: route.maxTokens });
-    const afford = this.d.meter.canAfford(estUsd);
-    if (!afford.ok) return this.enqueue(task, input, afford.resumeAt, afford.reason);
+    if (hit && this.now() - hit.t < CACHE_TTL) return { status: 'ok', data: hit.data as Out, cached: true };
 
     let res;
-    try {
-      res = await this.d.llm.complete({ ...route, system, user, schema: OUTPUT_SCHEMAS[task] });
-    } catch (e) {
-      if ((e as { status?: number }).status === 429) return this.enqueue(task, input, this.now() + RETRY_429_MS, 'rate limited');
-      throw e;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await this.d.llm.complete({ ...route, system, user, schema: OUTPUT_SCHEMAS[task] });
+        break;
+      } catch (e) {
+        const delay = RETRY_DELAYS_MS[attempt];
+        if (!isRetryable(e) || delay === undefined) throw e;
+        await (this.d.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(delay);
+      }
     }
     if (res.stopReason === 'refusal') throw new RefusalError(`The model declined the "${task}" request`);
     if (res.parsed == null) throw new Error(`No valid structured output for "${task}" (stop_reason=${res.stopReason})`);
-
-    const usd = costUsd(route.model, res.usage);
-    this.d.meter.record({ t: this.now(), usd, model: route.model, task, inTokens: res.usage.input_tokens, outTokens: res.usage.output_tokens });
 
     cache[key] = { t: this.now(), data: res.parsed };
     const kept = Object.entries(cache)
@@ -79,32 +75,6 @@ export class Gateway {
       .slice(0, CACHE_MAX);
     this.d.store.set(CACHE_KEY, Object.fromEntries(kept));
     await this.d.persist();
-    return { status: 'ok', data: res.parsed as Out, cached: false, usd };
-  }
-
-  private async enqueue(task: Task, input: unknown, resumeAt: number | null, reason: string) {
-    // `null` => task bigger than the whole window: park it a week out rather than loop forever.
-    const at = resumeAt ?? this.d.meter.windowEnd('week');
-    // Same task + same input already waiting (e.g. the UI polling): reuse it instead of piling up duplicates.
-    const dup = this.d.queue.items.find((i) => i.task === task && JSON.stringify(i.input) === JSON.stringify(input));
-    const item = dup ?? this.d.queue.add(task, input, at, this.now());
-    await this.d.persist();
-    return { status: 'queued' as const, id: item.id, resumeAt: at, reason };
-  }
-
-  /** Runs every queued task whose window has renewed. Call on a timer. Returns how many completed. */
-  async drainQueue(): Promise<number> {
-    let done = 0;
-    for (const item of this.d.queue.due(this.now())) {
-      this.d.queue.remove(item.id);
-      try {
-        const r = await this.run(item.task, item.input);
-        if (r.status === 'ok') done++;
-      } catch {
-        // Result is cached on success; on hard failure the task is dropped, not retried forever.
-      }
-    }
-    await this.d.persist();
-    return done;
+    return { status: 'ok', data: res.parsed as Out, cached: false };
   }
 }

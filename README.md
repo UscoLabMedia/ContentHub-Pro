@@ -3,26 +3,29 @@
 Estudio personal para creadores de contenido: **tendencias → tratamiento → audiencia → formatos → guion → producción → borrador → render → publicación → análisis de resultados**.
 Plataformas: TikTok, Instagram, Facebook, YouTube (largo y Shorts) y Spotify.
 
-## Abrir la app (un clic)
+## Abrir la app (un clic, Windows)
 
-| Sistema | Qué hacer |
-|---|---|
-| Windows | doble clic en `ContentHub.bat` |
-| macOS | doble clic en `ContentHub.command` |
-| Linux | `./ContentHub.sh` |
+**PC nuevo:** copia el archivo `Instalar-ContentHub.bat` (es uno solo) y haz doble clic. Instala Git y Node.js si faltan, descarga el proyecto, crea un acceso directo «ContentHub Pro» en el Escritorio y abre la app. Si GitHub pide iniciar sesión, hazlo en la ventana que se abre.
 
-El lanzador instala lo necesario la primera vez, se actualiza desde GitHub si no tienes cambios locales, prepara la interfaz y abre el navegador. Si falta Node.js, intenta instalarlo (winget/Homebrew) o te indica cómo.
+**Día a día:** doble clic en el acceso directo (o en `ContentHub.bat`). Se actualiza solo desde GitHub si no tienes cambios locales, instala lo que falte (incluido Claude Code), prepara la interfaz y abre el navegador.
 
-**En un PC nuevo** (una sola vez): instala [Git](https://git-scm.com) y ejecuta
+macOS: `ContentHub.command` · Linux: `./ContentHub.sh`. También funciona en Codespaces (`.devcontainer`).
 
-```bash
-git clone https://github.com/UscoLabMedia/ContentHub-Pro.git
-```
+**Para hacer ajustes con recarga en caliente:** `npm run dev:all` · pruebas y reglas: `npm run verify`.
 
-y luego haz doble clic en el lanzador de tu sistema, dentro de la carpeta `ContentHub-Pro`.
+## IA con tu cuenta de Claude Code
 
-**Para hacer ajustes** (recarga en caliente): `npm run dev:all`. Pruebas y reglas: `npm run verify`.
-También funciona en Codespaces / Dev Containers (`.devcontainer`).
+Por defecto la app usa **tu sesión de Claude Code** (sin clave de API): en Ajustes → «Conectar con Claude Code» se abre el inicio de sesión de Anthropic en el navegador (la app nunca ve tus credenciales). Las consultas cuentan contra los límites de tu plan. Es para uso personal. También puedes elegir una clave de API (se factura aparte).
+
+No hay barra de presupuesto: no existe una API para leer tu saldo o límites, así que no lo simulamos. Para controlar consumo la app aplica caché cifrada, el modelo más barato que sirva por tarea y entradas comprimidas.
+
+## Editar la app con Claude Code
+
+Botón **«Editar con Claude Code»** (arriba a la derecha): abre claude.ai/code en tu cuenta (elige el repositorio `UscoLabMedia/ContentHub-Pro`) o abre una terminal con Claude Code en la carpeta del proyecto. Los cambios llegan por GitHub y la app se actualiza sola al abrirla.
+
+## Crear contenido desde tus archivos
+
+Paso 1 → pestaña **«Desde mis archivos»**: sube un podcast, audio, video, texto, subtítulos (.srt/.vtt) o PDF. El audio y el video se transcriben **en tu PC** (whisper.cpp; en Windows se descarga solo la primera vez, ~60–180 MB según la calidad). La IA recibe solo la transcripción y propone 6–8 piezas (plataforma, formato, gancho, tramo del original). Las fuentes muy largas se condensan primero con el modelo barato. Al elegir una idea, el guion (paso 5) se escribe con el pasaje real del original.
 
 ## Contraseña y recuperación
 
@@ -31,17 +34,9 @@ También funciona en Codespaces / Dev Containers (`.devcontainer`).
 - Si pierdes **ambas**, los datos no se pueden recuperar: no hay puerta trasera ni servidor que lo restablezca. Es lo que hace real el cifrado.
 - Desde Ajustes puedes cambiar la contraseña o generar una clave de recuperación nueva (la anterior deja de funcionar).
 
-## Presupuesto ligado a tu cuenta
-
-La barra muestra el gasto diario y semanal frente a tus topes (Ajustes). Hay dos niveles:
-
-1. **Gasto medido por la app** (siempre): usa el consumo real de cada llamada.
-2. **Gasto de toda tu cuenta** (opcional): pega una clave de administrador (`sk-ant-admin…`) de tu organización en la Consola de Claude y la barra toma el mayor entre ambos. Requiere una organización de Consola; las cuentas individuales y el plan Team de claude.ai no tienen esa API. No existe una API pública para leer el saldo prepagado ni el límite de tu suscripción de claude.ai.
-
 ## Principios
 
 - **Cifrado:** bóveda AES-256-GCM (clave derivada con PBKDF2) en `~/.contenthub-pro/vault.enc`, fuera del repo. El servidor solo escucha en `127.0.0.1`.
-- **Presupuesto de IA con barra visual** (diario y semanal). Al agotarse, las tareas esperan y se reanudan solas cuando la ventana se renueva. El gasto se mide con el uso real que devuelve cada llamada.
 - **Ahorro de tokens obligatorio** (ver `CLAUDE.md`): único gateway de IA, JSON validado, modelo por tarea, caché cifrada, ingesta local de métricas, video local con Remotion, máximo 1080p.
 - **Métricas sin tokens:** sube CSV, PDF o capturas; se leen en local y solo un resumen mínimo llega a la IA.
 
@@ -59,4 +54,5 @@ La barra muestra el gasto diario y semanal frente a tus topes (Ajustes). Hay dos
 
 - `feat/scaffold`: estructura, cifrado, gateway con presupuesto, ingesta local y plantilla de video.
 - `feat/steps-1-5`: recuperación de contraseña, presupuesto ligado a la cuenta, inicio de un clic y pasos 1–5 con la IA real.
+- `feat/sources-and-engine`: sin presupuesto, IA con tu cuenta de Claude Code, instalador de Windows, botón de edición con Claude Code y contenido desde archivos.
 - Siguiente: producción y render (6–8), publicación (9) y análisis de resultados (10).

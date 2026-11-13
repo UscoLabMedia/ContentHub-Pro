@@ -1,34 +1,34 @@
 import { useEffect, useState } from 'react';
-import { api, type BudgetView } from '../api.ts';
+import { api, downloadVault, type EngineView } from '../api.ts';
 
 const field = 'w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm';
 const btn = 'rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium hover:bg-indigo-500';
 
 export function Settings({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [msg, setMsg] = useState('');
+  const [eng, setEng] = useState<EngineView | null>(null);
   const [apiKey, setApiKey] = useState('');
-  const [adminKey, setAdminKey] = useState('');
-  const [daily, setDaily] = useState('1');
-  const [weekly, setWeekly] = useState('5');
   const [newPw, setNewPw] = useState('');
   const [newRec, setNewRec] = useState('');
 
+  const refresh = () => api<EngineView>('/api/engine').then(setEng).catch(() => {});
   useEffect(() => {
-    api<BudgetView>('/api/budget').then((b) => {
-      setDaily(String(b.config.dailyLimitUsd));
-      setWeekly(String(b.config.weeklyLimitUsd));
-    }).catch(() => {});
+    void refresh();
+    const id = setInterval(refresh, 3000); // picks up the Claude Code sign-in as soon as it completes
+    return () => clearInterval(id);
   }, []);
 
   const act = async (label: string, fn: () => Promise<unknown>) => {
     try {
       await fn();
       setMsg(`${label}: listo`);
+      await refresh();
       onChanged();
     } catch (e) {
       setMsg(`${label}: ${(e as Error).message}`);
     }
   };
+  const setEngine = (engine: 'claude-code' | 'api') => act('Motor de IA', () => api('/api/engine', { method: 'PUT', json: { engine } }));
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4" role="dialog" aria-label="Ajustes">
@@ -39,25 +39,36 @@ export function Settings({ onClose, onChanged }: { onClose: () => void; onChange
         </div>
         {msg && <p className="text-xs text-amber-300">{msg}</p>}
 
-        <section className="space-y-2">
-          <h3 className="text-sm font-semibold">Clave de API (para la IA)</h3>
-          <p className="text-xs text-slate-400">Se guarda cifrada y nunca se vuelve a mostrar.</p>
-          <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-ant-…" aria-label="Clave de API" className={field} />
-          <button className={btn} onClick={() => act('Clave de API', () => api('/api/settings/key', { method: 'PUT', json: { key: apiKey } }).then(() => setApiKey('')))}>Guardar</button>
-        </section>
-
-        <section className="space-y-2">
-          <h3 className="text-sm font-semibold">Presupuesto</h3>
-          <div className="flex gap-2">
-            <label className="flex-1 text-xs text-slate-400">Tope diario (USD)<input value={daily} onChange={(e) => setDaily(e.target.value)} className={field} inputMode="decimal" /></label>
-            <label className="flex-1 text-xs text-slate-400">Tope semanal (USD)<input value={weekly} onChange={(e) => setWeekly(e.target.value)} className={field} inputMode="decimal" /></label>
-          </div>
-          <button className={btn} onClick={() => act('Presupuesto', () => api<BudgetView>('/api/budget', { method: 'PUT', json: { dailyLimitUsd: daily, weeklyLimitUsd: weekly } }))}>Guardar topes</button>
-          <p className="pt-2 text-xs text-slate-400">
-            Para que la barra siga el gasto real de <strong>toda tu cuenta</strong> (no solo esta app), pega una clave de administrador de tu organización en la Consola de Claude (<code>sk-ant-admin…</code>). Las cuentas individuales y el plan Team de claude.ai no la tienen: ahí la barra usa solo el gasto medido por esta app.
-          </p>
-          <input type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} placeholder="sk-ant-admin…" aria-label="Clave de administrador" className={field} />
-          <button className={btn} onClick={() => act('Vincular cuenta', () => api('/api/settings/admin-key', { method: 'PUT', json: { key: adminKey } }).then(() => setAdminKey('')))}>Vincular cuenta</button>
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">Motor de IA</h3>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="radio" name="engine" checked={eng?.engine === 'claude-code'} onChange={() => void setEngine('claude-code')} className="mt-1" />
+            <span>Mi cuenta de Claude Code <span className="text-xs text-slate-400">(recomendado: sin clave de API; usa tu plan)</span></span>
+          </label>
+          {eng?.engine === 'claude-code' && (
+            <div className="ml-6 space-y-2 text-xs">
+              {!eng.claude.installed && <p className="text-rose-400">Claude Code no está instalado en este equipo. Cierra la app y vuelve a abrirla con ContentHub.bat (lo instala), o ejecuta: npm install -g @anthropic-ai/claude-code</p>}
+              {eng.claude.installed && eng.claude.loggedIn && <p className="text-emerald-400">Conectado a tu cuenta de Claude.</p>}
+              {eng.claude.installed && !eng.claude.loggedIn && (
+                <>
+                  <p className="text-amber-300">Falta iniciar sesión. Se abrirá una ventana: sigue los pasos en el navegador.</p>
+                  <button className={btn} onClick={() => act('Conectar', () => api('/api/engine/login', { method: 'POST' }))}>Conectar con Claude Code</button>
+                </>
+              )}
+              <p className="text-slate-500">Uso personal: las consultas cuentan contra los límites de tu plan de Claude.</p>
+            </div>
+          )}
+          <label className="flex items-start gap-2 text-sm">
+            <input type="radio" name="engine" checked={eng?.engine === 'api'} onChange={() => void setEngine('api')} className="mt-1" />
+            <span>Clave de API de Anthropic <span className="text-xs text-slate-400">(se factura aparte por uso)</span></span>
+          </label>
+          {eng?.engine === 'api' && (
+            <div className="ml-6 space-y-2">
+              <p className="text-xs text-slate-400">{eng.hasKey ? 'Hay una clave guardada (cifrada). Pega otra para reemplazarla.' : 'Se guarda cifrada y nunca se vuelve a mostrar.'}</p>
+              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-ant-…" aria-label="Clave de API" className={field} />
+              <button className={btn} onClick={() => act('Clave de API', () => api('/api/settings/key', { method: 'PUT', json: { key: apiKey } }).then(() => setApiKey('')))}>Guardar clave</button>
+            </div>
+          )}
         </section>
 
         <section className="space-y-2">
@@ -73,6 +84,12 @@ export function Settings({ onClose, onChanged }: { onClose: () => void; onChange
               </p>
             )}
           </div>
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">Usar tus datos en otro PC</h3>
+          <p className="text-xs text-slate-400">Descarga tu bóveda cifrada y, en el otro PC, impórtala desde la pantalla de inicio. Necesitarás tu contraseña (o la clave de recuperación).</p>
+          <button className={btn} onClick={() => act('Exportar', downloadVault)}>Descargar bóveda cifrada</button>
         </section>
       </div>
     </div>
