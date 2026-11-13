@@ -1,26 +1,53 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  BudgetMeter, DEFAULT_BUDGET, Gateway, PRESETS, TaskQueue, Vault, costUsd, decryptJson, encryptJson, ingestFile,
+  BudgetMeter, DEFAULT_BUDGET, Gateway, PRESETS, TaskQueue, Vault, costUsd, ingestFile,
   digestToPrompt, parseNumber, renderScale, rowFromText, type BlobStorage, type LlmClient,
 } from '../src/index.ts';
 
 const FAST = 1000;
 
 describe('vault', () => {
-  it('round-trips and rejects a wrong password', async () => {
-    const blob = await encryptJson({ a: 1 }, 'pw', FAST);
-    expect(blob).not.toContain('"a"');
-    expect(await decryptJson(blob, 'pw')).toEqual({ a: 1 });
-    await expect(decryptJson(blob, 'nope')).rejects.toThrow(/Wrong password/);
-  });
-  it('persists through storage and reopens', async () => {
+  const mem = () => {
     let disk: string | null = null;
     const storage: BlobStorage = { read: async () => disk, write: async (t) => void (disk = t) };
-    const v = await Vault.open('pw', storage, FAST);
-    v.set('k', { x: 2 });
-    await v.save();
-    expect((await Vault.open('pw', storage, FAST)).get('k')).toEqual({ x: 2 });
-    await expect(Vault.open('bad', storage, FAST)).rejects.toThrow();
+    return { storage, raw: () => disk };
+  };
+
+  it('opens with the password, rejects a wrong one, and never stores plaintext', async () => {
+    const { storage, raw } = mem();
+    const { vault } = await Vault.create('pw-long-enough', storage, FAST);
+    vault.set('secret', 'sk-ant-xyz');
+    await vault.save();
+    expect(raw()).not.toContain('sk-ant-xyz');
+    expect((await Vault.open('pw-long-enough', storage)).get('secret')).toBe('sk-ant-xyz');
+    await expect(Vault.open('nope-nope', storage)).rejects.toThrow(/Wrong password/);
+  });
+
+  it('recovers with the recovery key and lets you set a new password', async () => {
+    const { storage } = mem();
+    const { vault, recoveryKey } = await Vault.create('old-password', storage, FAST);
+    vault.set('k', 1);
+    await vault.save();
+    expect(recoveryKey).toMatch(/^([0-9A-Z]{4}-){6}[0-9A-Z]{2}$/);
+
+    // human typing: lowercase, spaces, O/0 confusion
+    const typed = recoveryKey.toLowerCase().replace(/-/g, ' ').replace(/0/g, 'o');
+    const rec = await Vault.openWithRecovery(typed, storage);
+    expect(rec.get('k')).toBe(1);
+    await rec.changePassword('brand-new-pass', FAST);
+
+    await expect(Vault.open('old-password', storage)).rejects.toThrow();
+    expect((await Vault.open('brand-new-pass', storage)).get('k')).toBe(1);
+    // recovery key still valid after a password change
+    expect((await Vault.openWithRecovery(recoveryKey, storage)).get('k')).toBe(1);
+  });
+
+  it('rotating the recovery key invalidates the old one', async () => {
+    const { storage } = mem();
+    const { vault, recoveryKey } = await Vault.create('some-password', storage, FAST);
+    const fresh = await vault.rotateRecoveryKey();
+    await expect(Vault.openWithRecovery(recoveryKey, storage)).rejects.toThrow();
+    await expect(Vault.openWithRecovery(fresh, storage)).resolves.toBeTruthy();
   });
 });
 
@@ -46,6 +73,20 @@ describe('budget meter', () => {
     const m = mk(10, 1);
     m.record({ t: t - 1000, usd: 0.99, model: 'x', task: 't', inTokens: 0, outTokens: 0 });
     expect(m.canAfford(0.1)).toMatchObject({ ok: false, resumeAt: m.windowEnd('week') });
+  });
+});
+
+describe('account-linked spend', () => {
+  it('uses the larger of local ledger and account-reported spend, only within the same window', () => {
+    const t = Date.UTC(2026, 10, 11, 17, 0);
+    const m = new BudgetMeter({ ...DEFAULT_BUDGET, dailyLimitUsd: 2, weeklyLimitUsd: 10 }, [], () => t);
+    m.record({ t: t - 1, usd: 0.2, model: 'x', task: 't', inTokens: 0, outTokens: 0 });
+    m.setExternal('day', 1.5);
+    expect(m.spent('day')).toBe(1.5);
+    expect(m.canAfford(0.6)).toMatchObject({ ok: false });
+    // a stale reading from yesterday is ignored
+    m.external.day = { usd: 9, windowStart: m.windowStart('day') - 86_400_000 };
+    expect(m.spent('day')).toBeCloseTo(0.2);
   });
 });
 
@@ -87,6 +128,8 @@ describe('gateway', () => {
     const r = await gw.run('trends', 'tema');
     expect(r.status).toBe('queued');
     expect(complete).not.toHaveBeenCalled();
+    expect(queue.items).toHaveLength(1);
+    await gw.run('trends', 'tema'); // polling the same request must not duplicate it
     expect(queue.items).toHaveLength(1);
     advance(13 * 3600_000); // 06:00Z = past local midnight in Bogota (05:00Z)
     expect(await gw.drainQueue()).toBe(1);

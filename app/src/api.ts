@@ -15,6 +15,9 @@ export interface BudgetView {
   config: { dailyLimitUsd: number; weeklyLimitUsd: number };
   queued: { id: string; task: string; resumeAt: number }[];
   hasKey: boolean;
+  accountLinked: boolean;
+  lastSync: number | null;
+  syncError: string | null;
 }
 
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {

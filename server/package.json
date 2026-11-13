@@ -8,7 +8,8 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "@chp/core": "*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6"

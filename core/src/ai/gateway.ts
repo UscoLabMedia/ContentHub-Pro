@@ -85,7 +85,9 @@ export class Gateway {
   private async enqueue(task: Task, input: unknown, resumeAt: number | null, reason: string) {
     // `null` => task bigger than the whole window: park it a week out rather than loop forever.
     const at = resumeAt ?? this.d.meter.windowEnd('week');
-    const item = this.d.queue.add(task, input, at, this.now());
+    // Same task + same input already waiting (e.g. the UI polling): reuse it instead of piling up duplicates.
+    const dup = this.d.queue.items.find((i) => i.task === task && JSON.stringify(i.input) === JSON.stringify(input));
+    const item = dup ?? this.d.queue.add(task, input, at, this.now());
     await this.d.persist();
     return { status: 'queued' as const, id: item.id, resumeAt: at, reason };
   }

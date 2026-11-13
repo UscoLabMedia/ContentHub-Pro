@@ -13,10 +13,10 @@ if (spawnSync('npm', ['run', 'verify'], { stdio: 'inherit' }).status !== 0) proc
 
 console.log(`
 Setup OK. Next:
-  1. Server:  npm run dev:server     (terminal 1)
-  2. App:     npm run dev:app        (terminal 2)  -> http://localhost:5173
-  3. Claude Code skills (once per PC):
+  Open the app:   npm start   (or double-click ContentHub.bat / ContentHub.command / ContentHub.sh)
+  Make changes:   npm run dev:all
+  Claude Code skills (once per PC):
        Ponytail  -> enabled by .claude/settings.json (accept the plugin prompt)
        Remotion  -> npx skills add remotion-dev/skills
-  4. Your encrypted vault lives in ~/.contenthub-pro/vault.enc (copy it to use another PC's data).
+  Your encrypted vault lives in ~/.contenthub-pro/vault.enc (copy it to use the same data on another PC).
 `);

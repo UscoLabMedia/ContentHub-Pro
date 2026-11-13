@@ -11,7 +11,8 @@
     "@remotion/cli": "^4.0.543",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "remotion": "^4.0.543"
+    "remotion": "^4.0.543",
+    "@chp/core": "*"
   },
   "devDependencies": {
     "@types/react": "^19.3.0"

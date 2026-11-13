@@ -24,6 +24,8 @@ Estas reglas son **obligatorias**. Varias están además forzadas por código o 
 
 ## Seguridad
 
+- La bóveda usa cifrado de sobre: la clave de datos se envuelve con la contraseña y con una clave de recuperación que se muestra una sola vez. No añadir ningún mecanismo que permita abrirla sin una de las dos.
+- Los intentos de desbloqueo están limitados (backoff) en el servidor; no quitarlo.
 - Nada de claves en el código, `.env` versionados ni logs. Las claves viven en la bóveda cifrada (AES-GCM, PBKDF2) y el servidor solo escucha en `127.0.0.1`.
 - `*.enc` y `.contenthub-data/` nunca se versionan. Los datos del usuario no van en este repo.
 - La clave de API es de solo escritura desde la UI: ningún endpoint la devuelve.

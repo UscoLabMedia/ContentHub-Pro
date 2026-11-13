@@ -1,64 +1,73 @@
-// Encrypted vault: PBKDF2-SHA256 -> AES-256-GCM via Web Crypto (Node >=20 and browsers).
-// The password lives only in memory (#password); the blob on disk is useless without it.
+// Encrypted vault with envelope encryption.
+//   data  --AES-256-GCM--> random data key (DEK)
+//   DEK   wrapped twice:  by the password (PBKDF2) and by a one-time RECOVERY KEY (shown once at creation).
+// Forgot the password? The recovery key opens the vault and lets you set a new password.
+// Lost both? The data is unrecoverable by design (there is no backdoor and no server that can reset it).
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const VERSION = 1;
+const AAD_DATA = enc.encode('chp-v2-data');
+const AAD_WRAP = enc.encode('chp-v2-wrap');
 export const DEFAULT_ITERATIONS = 600_000;
+const RECOVERY_ITERATIONS = 100_000; // recovery key already has 128 bits of entropy
 
-interface Blob {
-  v: number;
-  kdf: 'PBKDF2-SHA256';
-  iter: number;
+interface Wrap {
   salt: string;
+  iter: number;
+  iv: string;
+  ct: string;
+}
+interface Blob {
+  v: 2;
+  pw: Wrap;
+  rec: Wrap;
   iv: string;
   ct: string;
 }
 
 const b64 = (u: Uint8Array) => Buffer.from(u).toString('base64');
-const unb64 = (s: string) => Uint8Array.from(Buffer.from(s, "base64"));
+const unb64 = (s: string) => Uint8Array.from(Buffer.from(s, 'base64'));
+const rand = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
-async function deriveKey(password: string, salt: Uint8Array<ArrayBuffer>, iter: number): Promise<CryptoKey> {
-  const base = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter },
-    base,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
+async function kek(secret: string, salt: Uint8Array<ArrayBuffer>, iter: number): Promise<CryptoKey> {
+  const base = await crypto.subtle.importKey('raw', enc.encode(secret), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 
-export async function encryptJson(data: unknown, password: string, iter = DEFAULT_ITERATIONS): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(password, salt, iter);
-  const ct = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv, additionalData: enc.encode(`chp-v${VERSION}`) },
-      key,
-      enc.encode(JSON.stringify(data)),
-    ),
-  );
-  const blob: Blob = { v: VERSION, kdf: 'PBKDF2-SHA256', iter, salt: b64(salt), iv: b64(iv), ct: b64(ct) };
-  return JSON.stringify(blob);
+async function wrapDek(dek: Uint8Array<ArrayBuffer>, secret: string, iter: number): Promise<Wrap> {
+  const salt = rand(16);
+  const iv = rand(12);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: AAD_WRAP }, await kek(secret, salt, iter), dek));
+  return { salt: b64(salt), iter, iv: b64(iv), ct: b64(ct) };
 }
 
-export async function decryptJson<T = unknown>(blobText: string, password: string): Promise<T> {
-  const blob = JSON.parse(blobText) as Blob;
-  if (blob.v !== VERSION || blob.kdf !== 'PBKDF2-SHA256') throw new Error('Unsupported vault format');
-  if (!(blob.iter >= 1000 && blob.iter <= 5_000_000)) throw new Error('Invalid vault parameters');
-  const key = await deriveKey(password, unb64(blob.salt), blob.iter);
+async function unwrapDek(w: Wrap, secret: string): Promise<Uint8Array<ArrayBuffer>> {
+  if (!(w.iter >= 1000 && w.iter <= 5_000_000)) throw new Error('Invalid vault parameters');
   try {
-    const pt = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: unb64(blob.iv), additionalData: enc.encode(`chp-v${VERSION}`) },
-      key,
-      unb64(blob.ct),
-    );
-    return JSON.parse(dec.decode(pt)) as T;
+    const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(w.iv), additionalData: AAD_WRAP }, await kek(secret, unb64(w.salt), w.iter), unb64(w.ct));
+    return new Uint8Array(raw);
   } catch {
-    throw new Error('Wrong password or corrupted vault');
+    throw new Error('Wrong password or recovery key');
   }
+}
+
+const dataKey = (dek: Uint8Array<ArrayBuffer>) => crypto.subtle.importKey('raw', dek, 'AES-GCM', false, ['encrypt', 'decrypt']);
+
+// --- recovery key: 128 random bits, Crockford base32, grouped for humans -------------------
+const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+export function generateRecoveryKey(): string {
+  const bytes = rand(16);
+  let bits = '';
+  for (const b of bytes) bits += b.toString(2).padStart(8, '0');
+  bits = bits.padEnd(130, '0');
+  let out = '';
+  for (let i = 0; i < 130; i += 5) out += ALPHABET[parseInt(bits.slice(i, i + 5), 2)];
+  return out.match(/.{1,4}/g)!.join('-');
+}
+
+export function normalizeRecoveryKey(input: string): string {
+  return input.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^0-9A-Z]/g, '');
 }
 
 export interface BlobStorage {
@@ -72,28 +81,57 @@ export interface KeyValueStore {
   delete(key: string): void;
 }
 
-/** In-memory key/value map persisted as a single encrypted blob. */
 export class Vault implements KeyValueStore {
-  #password: string;
+  #dek: Uint8Array<ArrayBuffer>;
   #data: Record<string, unknown>;
   #storage: BlobStorage;
-  #iter: number;
+  #pw: Wrap;
+  #rec: Wrap;
 
-  private constructor(password: string, data: Record<string, unknown>, storage: BlobStorage, iter: number) {
-    this.#password = password;
+  private constructor(dek: Uint8Array<ArrayBuffer>, data: Record<string, unknown>, storage: BlobStorage, pw: Wrap, rec: Wrap) {
+    this.#dek = dek;
     this.#data = data;
     this.#storage = storage;
-    this.#iter = iter;
+    this.#pw = pw;
+    this.#rec = rec;
   }
 
-  static async open(password: string, storage: BlobStorage, iter = DEFAULT_ITERATIONS): Promise<Vault> {
+  static async exists(storage: BlobStorage): Promise<boolean> {
+    return (await storage.read()) !== null;
+  }
+
+  /** Creates a new vault. The returned recovery key is shown ONCE; it is never stored in plain text. */
+  static async create(password: string, storage: BlobStorage, iter = DEFAULT_ITERATIONS): Promise<{ vault: Vault; recoveryKey: string }> {
+    if (await Vault.exists(storage)) throw new Error('A vault already exists');
+    const dek = rand(32);
+    const recoveryKey = generateRecoveryKey();
+    const vault = new Vault(dek, {}, storage, await wrapDek(dek, password, iter), await wrapDek(dek, normalizeRecoveryKey(recoveryKey), RECOVERY_ITERATIONS));
+    await vault.save();
+    return { vault, recoveryKey };
+  }
+
+  private static async load(storage: BlobStorage, secret: string, via: 'pw' | 'rec'): Promise<Vault> {
     const text = await storage.read();
-    if (text === null) {
-      const v = new Vault(password, {}, storage, iter);
-      await v.save();
-      return v;
+    if (text === null) throw new Error('No vault found');
+    const blob = JSON.parse(text) as Blob;
+    if (blob.v !== 2) throw new Error('Unsupported vault format');
+    const dek = await unwrapDek(via === 'pw' ? blob.pw : blob.rec, secret);
+    let data: Record<string, unknown>;
+    try {
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(blob.iv), additionalData: AAD_DATA }, await dataKey(dek), unb64(blob.ct));
+      data = JSON.parse(dec.decode(pt));
+    } catch {
+      throw new Error('Vault data is corrupted');
     }
-    return new Vault(password, await decryptJson<Record<string, unknown>>(text, password), storage, iter);
+    return new Vault(dek, data, storage, blob.pw, blob.rec);
+  }
+
+  static open(password: string, storage: BlobStorage): Promise<Vault> {
+    return Vault.load(storage, password, 'pw');
+  }
+
+  static openWithRecovery(recoveryKey: string, storage: BlobStorage): Promise<Vault> {
+    return Vault.load(storage, normalizeRecoveryKey(recoveryKey), 'rec');
   }
 
   get<T>(key: string): T | undefined {
@@ -105,7 +143,25 @@ export class Vault implements KeyValueStore {
   delete(key: string): void {
     delete this.#data[key];
   }
+
   async save(): Promise<void> {
-    await this.#storage.write(await encryptJson(this.#data, this.#password, this.#iter));
+    const iv = rand(12);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: AAD_DATA }, await dataKey(this.#dek), enc.encode(JSON.stringify(this.#data))));
+    const blob: Blob = { v: 2, pw: this.#pw, rec: this.#rec, iv: b64(iv), ct: b64(ct) };
+    await this.#storage.write(JSON.stringify(blob));
+  }
+
+  /** Works after opening with either the password or the recovery key. */
+  async changePassword(newPassword: string, iter = DEFAULT_ITERATIONS): Promise<void> {
+    this.#pw = await wrapDek(this.#dek, newPassword, iter);
+    await this.save();
+  }
+
+  /** Issues a fresh recovery key and invalidates the old one. Show it once. */
+  async rotateRecoveryKey(): Promise<string> {
+    const recoveryKey = generateRecoveryKey();
+    this.#rec = await wrapDek(this.#dek, normalizeRecoveryKey(recoveryKey), RECOVERY_ITERATIONS);
+    await this.save();
+    return recoveryKey;
   }
 }

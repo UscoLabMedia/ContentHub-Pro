@@ -32,19 +32,22 @@ function Bar({ label, w }: { label: string; w: WindowStatus }) {
 }
 
 /** Context-style meter of AI spend. Tasks over budget wait and resume when the window renews. */
-export function BudgetBar() {
+export function BudgetBar({ refreshKey = 0 }: { refreshKey?: number }) {
   const [b, setB] = useState<BudgetView | null>(null);
   useEffect(() => {
     const load = () => api<BudgetView>('/api/budget').then(setB).catch(() => {});
     load();
     const id = setInterval(load, 15_000);
     return () => clearInterval(id);
-  }, []);
+  }, [refreshKey]);
   if (!b) return null;
   return (
     <div className="flex flex-wrap items-center gap-4 text-xs">
       <Bar label="Hoy" w={b.day} />
       <Bar label="Semana" w={b.week} />
+      <span className={b.accountLinked ? 'text-emerald-400' : 'text-slate-500'} title={b.syncError ?? undefined}>
+        {b.accountLinked ? (b.syncError ? 'Cuenta: error de sincronía' : 'Vinculado a tu cuenta') : 'Solo gasto de esta app'}
+      </span>
       {b.blocked && b.resumeAt && <span className="text-amber-400">Tope alcanzado · se reanuda en {eta(b.resumeAt)}</span>}
       {b.queued.length > 0 && <span className="text-slate-400">{b.queued.length} tarea(s) en espera</span>}
     </div>

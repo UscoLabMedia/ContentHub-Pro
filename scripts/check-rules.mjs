@@ -1,9 +1,10 @@
 // Enforces the mandatory rules from CLAUDE.md. Run by `npm run check` and CI.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const SKIP = new Set(['node_modules', 'dist', 'out', 'coverage', '.git']);
 const problems = [];
 

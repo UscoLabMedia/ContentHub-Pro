@@ -38,3 +38,22 @@ export function createLlmClient(apiKey: string): LlmClient {
     },
   };
 }
+
+/**
+ * Spend reported by YOUR ACCOUNT (all usage in the organization, not just this app), in USD.
+ * Needs an Admin API key from a Claude Console organization; individual accounts and the claude.ai
+ * Team plan cannot use it. Data can lag behind real time, so the meter keeps the larger of the two.
+ */
+export function createAccountSpend(adminKey: string): (fromMs: number, toMs: number) => Promise<number> {
+  const client = new Anthropic({ apiKey: adminKey });
+  return async (fromMs, toMs) => {
+    let cents = 0;
+    for await (const row of client.beta.organization.analytics.cost.list({
+      starting_at: new Date(fromMs).toISOString(),
+      ending_at: new Date(toMs).toISOString(),
+    })) {
+      cents += Number(row.cost.amount);
+    }
+    return cents / 100;
+  };
+}

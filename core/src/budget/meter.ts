@@ -38,6 +38,9 @@ export interface BudgetStatus {
 }
 
 export class BudgetMeter {
+  /** Spend reported by the Claude account (Admin API), per window. See createAccountSpend. */
+  external: Partial<Record<WindowKind, { usd: number; windowStart: number }>> = {};
+
   constructor(
     public cfg: BudgetConfig = DEFAULT_BUDGET,
     public ledger: LedgerEntry[] = [],
@@ -56,9 +59,16 @@ export class BudgetMeter {
     return this.windowStart(kind, at) + (kind === 'day' ? DAY : 7 * DAY);
   }
 
+  /** Larger of: what this app recorded, and what the account itself reports for the same window. */
   spent(kind: WindowKind, at = this.now()): number {
     const from = this.windowStart(kind, at);
-    return this.ledger.filter((e) => e.t >= from && e.t <= at).reduce((s, e) => s + e.usd, 0);
+    const local = this.ledger.filter((e) => e.t >= from && e.t <= at).reduce((s, e) => s + e.usd, 0);
+    const ext = this.external[kind];
+    return Math.max(local, ext && ext.windowStart === from ? ext.usd : 0);
+  }
+
+  setExternal(kind: WindowKind, usd: number, at = this.now()): void {
+    this.external[kind] = { usd, windowStart: this.windowStart(kind, at) };
   }
 
   private win(kind: WindowKind): WindowStatus {

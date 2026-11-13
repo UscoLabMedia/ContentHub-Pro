@@ -2,8 +2,15 @@
   "name": "contenthub-pro",
   "private": true,
   "type": "module",
-  "workspaces": ["core", "server", "app", "video"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "core",
+    "server",
+    "app",
+    "video"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "dev:server": "npm run dev -w server",
@@ -12,7 +19,11 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test -w core",
     "check": "node scripts/check-rules.mjs",
-    "verify": "npm run check && npm run typecheck && npm run test"
+    "verify": "npm run check && npm run typecheck && npm run test",
+    "start": "node scripts/start.mjs",
+    "dev:all": "node scripts/dev.mjs"
   },
-  "devDependencies": { "typescript": "^5.6.0" }
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
 }
