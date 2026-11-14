@@ -142,7 +142,7 @@ export type StyleSheet = z.infer<typeof StyleSheetOut>;
 export const MusicMoodOut = z.object({ mood: z.enum(['documental', 'inspirador', 'alegre', 'energico', 'calmo', 'tenso', 'misterioso', 'triste']), hint: z.string().max(40) });
 
 export const ArtQueriesOut = z.object({
-  scenes: z.array(z.object({ key: z.string(), query: z.string().max(60), draw: z.string().max(160) })).max(40),
+  scenes: z.array(z.object({ key: z.string(), query: z.string().max(60), alts: z.array(z.string().max(60)).max(2).default([]), draw: z.string().max(160) })).max(40),
 });
 export const DrawOut = z.object({ svg: z.string().max(16000) });
 export const BeatWordsOut = z.object({

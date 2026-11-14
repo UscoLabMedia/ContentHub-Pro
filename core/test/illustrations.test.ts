@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { artCredits, artQuery, creditLine, licenseOf, parseCommons, parseOpenverse, relevant, sanitizeSvg, searchArt } from '../src/illustrations.ts';
+import { artCredits, artQuery, creditLine, licenseOf, parseCommons, parseOpenverse, relevant, sanitizeSvg, scoreArt, searchArt, searchArtPlan, type ArtCandidate } from '../src/illustrations.ts';
 
 describe('licenses', () => {
   it('accepts CC0, public domain and CC BY only', () => {
@@ -85,5 +85,37 @@ describe('credits', () => {
     const art = { k1: { id: 'a'.repeat(16), kind: 'image', ext: 'png', title: 't', origin: 'web', credit: '«A», X (CC BY 4.0)' }, k2: { id: 'b'.repeat(16), kind: 'svg', ext: 'svg', title: 't', origin: 'ai', credit: '' } } as const;
     const keyOf = (t: string) => (t === 'uno' || t === 'dos' ? 'k1' : 'k2');
     expect(artCredits([{ text: 'uno' }, { text: 'dos' }, { text: 'tres' }], art as never, keyOf)).toEqual(['«A», X (CC BY 4.0)']);
+  });
+});
+
+describe('scoreArt / searchArtPlan', () => {
+  const mk = (o: Partial<ArtCandidate>): ArtCandidate => ({ id: 'x', title: 'Untitled', url: 'https://i/x.jpg', thumb: 'https://i/x.jpg', author: '', license: 'cc0', licenseLabel: 'CC0', page: 'https://p', provider: 'openverse', tags: [], ...o });
+  it('prefers a title match over a tag match, and the specific query over a broader one', () => {
+    const inTitle = scoreArt(mk({ title: 'Deforestation in the Amazon' }), ['deforestation amazon', 'forest']);
+    const inTags = scoreArt(mk({ title: 'Aerial photo', tags: ['deforestation', 'amazon'] }), ['deforestation amazon', 'forest']);
+    const later = scoreArt(mk({ title: 'Green forest' }), ['deforestation amazon', 'forest']);
+    expect(inTitle).toBeGreaterThan(inTags);
+    expect(inTitle).toBeGreaterThan(later);
+    expect(later).toBeGreaterThan(0);
+  });
+  it('penalizes tiny images and panoramas', () => {
+    const q = ['forest'];
+    const good = scoreArt(mk({ title: 'Forest', width: 2000, height: 3000 }), q);
+    expect(scoreArt(mk({ title: 'Forest', width: 300, height: 200 }), q)).toBeLessThan(good);
+    expect(scoreArt(mk({ title: 'Forest', width: 6000, height: 1000 }), q)).toBeLessThan(good);
+  });
+  it('falls back to a broader query when the specific one finds nothing', async () => {
+    const f = (async (u: string) => {
+      const q = decodeURIComponent(u.split('q=')[1] ?? '').split('&')[0]!;
+      const results = q === 'forest' ? [{ id: 'f1', title: 'Forest path', url: 'https://i/f1.jpg', creator: 'A', license: 'cc0', filetype: 'jpg', width: 1600, height: 2400 }] : [];
+      return u.includes('openverse') ? new Response(JSON.stringify({ results })) : new Response('x', { status: 500 });
+    }) as unknown as typeof fetch;
+    const r = await searchArtPlan(['xylophone rainforest deforestation', 'forest'], { fetcher: f });
+    expect(r.map((c) => c.id)).toEqual(['ov-f1']);
+  });
+  it('merges duplicates and returns nothing without queries', async () => {
+    let n = 0;
+    expect(await searchArtPlan([' ', ''], { fetcher: (async () => { n++; return new Response('{}'); }) as unknown as typeof fetch })).toEqual([]);
+    expect(n).toBe(0);
   });
 });

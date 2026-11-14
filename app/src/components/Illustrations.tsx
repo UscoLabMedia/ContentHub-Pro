@@ -10,6 +10,7 @@ const fileUrl = (a: Pick<ArtRef, 'id' | 'ext'>) => `/api/art/${a.id}.${a.ext}?s=
 
 interface Info {
   query: string;
+  alts: string[];
   draw: string;
   cands: ArtCandidate[] | null;
 }
@@ -35,8 +36,8 @@ export function Illustrations({ project, set }: P) {
 
   /** Search terms for every scene: one cheap AI query per script (English, visual), or local words if there is no AI. */
   const queries = async (): Promise<Record<string, Info>> => {
-    const r = await api<{ items: { key: string; query: string; draw: string }[] }>('/api/art/queries', { method: 'POST', json: { scenes: scenes.map((s) => ({ text: s.text })), style: { name: style.name, background: style.background } } });
-    return Object.fromEntries(r.items.map((x) => [x.key, { query: x.query, draw: x.draw, cands: null }]));
+    const r = await api<{ items: { key: string; query: string; alts?: string[]; draw: string }[] }>('/api/art/queries', { method: 'POST', json: { scenes: scenes.map((s) => ({ text: s.text })), style: { name: style.name, background: style.background } } });
+    return Object.fromEntries(r.items.map((x) => [x.key, { query: x.query, alts: x.alts ?? [], draw: x.draw, cands: null }]));
   };
 
   const findAll = async () => {
@@ -53,7 +54,7 @@ export function Illustrations({ project, set }: P) {
         if (art[k]) continue;
         setMsg(`Buscando imagen libre para la escena ${i + 1} de ${scenes.length}…`);
         const q = qs[k]?.query ?? '';
-        const { candidates } = await api<{ candidates: ArtCandidate[] }>('/api/art/search', { method: 'POST', json: { query: q } });
+        const { candidates } = await api<{ candidates: ArtCandidate[] }>('/api/art/search', { method: 'POST', json: { queries: [q, ...(qs[k]?.alts ?? [])] } });
         nextInfo[k] = { ...qs[k]!, cands: candidates };
         for (const c of candidates) {
           try {
@@ -95,7 +96,7 @@ export function Illustrations({ project, set }: P) {
       let i = info[key];
       if (!i) i = (await queries())[key];
       if (!i) throw new Error('No pude preparar la búsqueda');
-      const { candidates } = await api<{ candidates: ArtCandidate[] }>('/api/art/search', { method: 'POST', json: { query: i.query || text.slice(0, 60) } });
+      const { candidates } = await api<{ candidates: ArtCandidate[] }>('/api/art/search', { method: 'POST', json: { queries: [i.query || text.slice(0, 60), ...i.alts] } });
       setInfo((p) => ({ ...p, [key]: { ...i!, cands: candidates } }));
     } catch (e) {
       setErr((e as Error).message);
@@ -129,6 +130,22 @@ export function Illustrations({ project, set }: P) {
         {Object.keys(art).length > 0 && <button className={secondary} disabled={!!busy} onClick={() => put(Object.fromEntries(Object.keys(art).map((k) => [k, null])))}>Quitar todas</button>}
       </div>
       {msg && <p className="text-xs text-slate-300" role="status">{msg}</p>}
+      {scenes.length > 0 && (
+        <div aria-label="Hoja de contactos de las escenas">
+          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+            {scenes.map((sc, i) => {
+              const a = art[textKey(sc.text)];
+              return (
+                <div key={textKey(sc.text) + i} className="space-y-0.5" title={sc.text}>
+                  {a ? <img src={fileUrl(a)} alt="" className="aspect-[3/4] w-full rounded bg-slate-800 object-cover" /> : <div className="flex aspect-[3/4] w-full items-center justify-center rounded border border-dashed border-amber-700/60 bg-slate-950 px-1 text-center text-[10px] leading-tight text-amber-400">sin imagen<br />(frase grande)</div>}
+                  <p className="truncate text-[10px] text-slate-500">{i + 1}. {sc.text}</p>
+                </div>
+              );
+            })}
+          </div>
+          {Object.keys(art).length > 0 && scenes.some((sc) => !art[textKey(sc.text)]) && <p className="mt-1 text-[11px] text-amber-400">Las escenas sin imagen salen con su frase clave en grande. Puedes buscarles otra imagen abajo o dibujarlas.</p>}
+        </div>
+      )}
       <ul className="space-y-2">
         {scenes.map((sc, i) => {
           const k = textKey(sc.text);

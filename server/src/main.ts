@@ -10,7 +10,7 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, searchArtPlan, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, segmentsIn, matchBeatWords, normalizeHook, normalizeCta, ctaScene, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
@@ -823,23 +823,26 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/art/queries' && req.method === 'POST') {
       const b = await readBody(req);
       const scenes: { text: string }[] = Array.isArray(b.scenes) ? b.scenes.slice(0, 40).map((x: { text: unknown }) => ({ text: String(x.text ?? '').slice(0, 400) })) : [];
-      const local = scenes.map((x) => ({ key: textKey(x.text), query: artQuery(x.text), draw: '' }));
+      const local = scenes.map((x) => ({ key: textKey(x.text), query: artQuery(x.text), alts: [artQuery(x.text, 1)].filter((a) => a && a !== artQuery(x.text)), draw: '' }));
       if (!s.gateway || !scenes.length) return json(res, 200, { items: local, ai: false });
       try {
         // One cheap query for the whole script (cached): English search terms per scene.
         const st = b.style && typeof b.style === 'object' ? `ESTILO ${String(b.style.name ?? '').slice(0, 40)}|fondo ${String(b.style.background ?? '').slice(0, 12)}` : 'ESTILO libre';
         const r = await s.gateway.run('artQueries', `${st}\n${scenes.map((x) => `${textKey(x.text)}|${x.text}`).join('\n')}`);
         const got = new Map(r.data.scenes.map((x) => [x.key, x]));
-        return json(res, 200, { items: local.map((l) => ({ ...l, ...(got.get(l.key)?.query ? { query: got.get(l.key)!.query, draw: got.get(l.key)!.draw } : {}) })), ai: true });
+        return json(res, 200, { items: local.map((l) => ({ ...l, ...(got.get(l.key)?.query ? { query: got.get(l.key)!.query, alts: got.get(l.key)!.alts, draw: got.get(l.key)!.draw } : {}) })), ai: true });
       } catch {
         return json(res, 200, { items: local, ai: false });
       }
     }
     if (url.pathname === '/api/art/search' && req.method === 'POST') {
-      const q = String((await readBody(req)).query ?? '').slice(0, 80);
+      const b = await readBody(req);
+      // One query or a plan (most specific first, then broader ones); candidates come back ranked by how well they fit.
+      const qs: string[] = (Array.isArray(b.queries) ? b.queries : [b.query]).map((q: unknown) => String(q ?? '').slice(0, 80)).filter((q: string) => q.trim()).slice(0, 3);
       // Test seam: CHP_ART_TEST_URL replaces the public providers with a local fixture (never set in normal use).
       const test = process.env.CHP_ART_TEST_URL;
-      return json(res, 200, { candidates: test ? ((await (await fetch(`${test}?q=${encodeURIComponent(q)}`)).json()) as unknown[]) : await searchArt(q) });
+      if (test) return json(res, 200, { candidates: (await (await fetch(`${test}?q=${encodeURIComponent(qs[0] ?? '')}`)).json()) as unknown[] });
+      return json(res, 200, { candidates: await searchArtPlan(qs, { portrait: b.portrait !== false }) });
     }
     if (url.pathname === '/api/art/use' && req.method === 'POST') {
       const c = (await readBody(req)).candidate ?? {};
