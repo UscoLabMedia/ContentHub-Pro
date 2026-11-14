@@ -12,6 +12,8 @@ export * from './captions.ts';
 export * from './freesearch.ts';
 export * from './illustrations.ts';
 export * from './music.ts';
+export * from './sfx.ts';
+export * from './sfx-synth.ts';
 export * from './voice/index.ts';
 export * from './radar/index.ts';
 export * from './util/proc.ts';

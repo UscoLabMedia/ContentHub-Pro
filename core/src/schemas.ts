@@ -151,6 +151,8 @@ export const VideoSpec = z.object({
   style: StyleSchema.optional(),
   /** Background music with its mix (the URL is added by the server). */
   music: z.object({ url: z.string(), volume: z.number(), duck: z.boolean(), duckTo: z.number(), fadeInSec: z.number(), fadeOutSec: z.number() }).optional(),
+  /** Sound-effects track (WAV) built by the server for this video. */
+  sfx: z.object({ url: z.string() }).optional(),
   /** Fonts the person uploaded: loaded by the render browser from this server. */
   fonts: z.array(z.object({ family: z.string(), url: z.string() })).optional(),
 });

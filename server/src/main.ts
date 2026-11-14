@@ -10,7 +10,7 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
@@ -18,6 +18,7 @@ import { isRenderId, renderFile, renderFrame, renderStatus, startRender } from '
 import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
 import { analyzeReference } from './reference.ts';
+import { buildSfxTrack, sfxTrackPath } from './sfx.ts';
 import { downloadMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
 import { ART_MIME, artExists, artPath, artUrl, downloadArt, saveDrawn } from './art.ts';
 import { checkMany } from './verify.ts';
@@ -88,6 +89,11 @@ const withArt = <T extends { text: string; durationSec: number }>(scenes: T[], s
     const a = art[textKey(sc.text)];
     return a && artExists(DATA_DIR, a) ? { ...sc, art: { url: artUrl(PORT, s.token, a), kind: a.kind } } : sc;
   });
+};
+/** The sound-effects plan saved in the project (null when switched off). */
+const sfxFor = (s: { vault: Vault; token: string }): { config: ReturnType<typeof normalizeSfx>; url: (hash: string) => string } | undefined => {
+  const config = normalizeSfx(s.vault.get<{ sfx?: Partial<ReturnType<typeof normalizeSfx>> }>('project')?.sfx);
+  return config.enabled ? { config, url: (hash) => `http://127.0.0.1:${PORT}/api/sfx/${hash}.wav?s=${s.token}` } : undefined;
 };
 /** Background music chosen in the project (a track + its mix). */
 const projectMusic = (s: { vault: Vault }): { track: MusicRef | null; mix?: Partial<MusicMix> } => s.vault.get<{ music?: { track: MusicRef | null; mix?: Partial<MusicMix> } }>('project')?.music ?? { track: null };
@@ -312,6 +318,17 @@ const server = createServer(async (req, res) => {
       }
       return sendBytes(req, res, buf, 'audio/mpeg');
     }
+    const sfxm = url.pathname.match(/^\/api\/sfx\/([a-z0-9-]{3,40})\.wav$/);
+    if (sfxm && req.method === 'GET') {
+      if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
+      const name = sfxm[1]!;
+      let body: Uint8Array | null = null;
+      if (isSfxId(name) || isAmbientId(name)) body = toWav16(synthSfx(name)); // a library sound, for listening
+      else if (/^[a-f0-9]{16}$/.test(name) && existsSync(sfxTrackPath(DATA_DIR, name))) body = await readFile(sfxTrackPath(DATA_DIR, name)); // a built track
+      if (!body) return json(res, 404, { error: 'Not found' });
+      res.writeHead(200, { 'content-type': 'audio/wav', 'content-length': body.length, 'cache-control': 'private, max-age=3600' });
+      return void res.end(Buffer.from(body));
+    }
     const musm = url.pathname.match(/^\/api\/music\/([a-f0-9]{16})\.mp3$/);
     if (musm && req.method === 'GET') {
       if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
@@ -501,6 +518,17 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // --- sound effects: hear the plan on the project's timeline without rendering ---
+    if (url.pathname === '/api/sfx/preview' && req.method === 'POST') {
+      const b = await readBody(req);
+      const scenes = (Array.isArray(b.scenes) ? b.scenes : []).slice(0, 60).map((x: { text: unknown; durationSec: unknown }) => ({ text: String(x.text ?? '').slice(0, 400), durationSec: Math.min(60, Math.max(1, Number(x.durationSec) || 3)) }));
+      const style = VideoSpec.shape.style.safeParse(b.style);
+      const config = normalizeSfx({ ...(b.config ?? {}), enabled: true });
+      const arted = withArt(scenes, s); // illustrations the person chose also trigger their sound
+      const hash = await buildSfxTrack(DATA_DIR, arted, style.success ? (style.data as never) : DEFAULT_STYLE, config);
+      return hash ? json(res, 200, { hash }) : json(res, 200, { hash: null });
+    }
+
     // --- background music: free search, own files, mood hint ---
     if (url.pathname === '/api/music/mood' && req.method === 'POST') {
       const b = await readBody(req);
@@ -651,7 +679,7 @@ const server = createServer(async (req, res) => {
         return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: voice ? {
           tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
           audioUrl: (hash) => `http://127.0.0.1:${PORT}/api/audio/${hash}.wav?s=${s.token}`,
-        } : undefined }));
+        } : undefined, extras: { sfx: sfxFor(s) } }));
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudieron iniciar los entregables' });
       }
@@ -679,7 +707,7 @@ const server = createServer(async (req, res) => {
         return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, voice ? {
           tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
           audioUrl: (hash) => `http://127.0.0.1:${PORT}/api/audio/${hash}.wav?s=${s.token}`,
-        } : undefined));
+        } : undefined, { sfx: sfxFor(s) }));
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo iniciar el render' });
       }

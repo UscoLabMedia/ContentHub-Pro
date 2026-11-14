@@ -6,7 +6,7 @@ import {
   DELIVERABLES, buildDescription, chaptersFrom, runFfmpeg, scenesToSrt, slug, validateShorts,
   type DeliverableId, type Scene, type ShortRange, type VideoSpec,
 } from '@chp/core';
-import { narrateScenes, renderStill, startRender, waitForRender, type Narration } from './render.ts';
+import { narrateScenes, renderStill, startRender, waitForRender, type Narration, type RenderExtras } from './render.ts';
 
 export interface PackageRequest {
   items: DeliverableId[];
@@ -76,7 +76,7 @@ async function voiceWav(clips: { file: string; durationSec: number }[], out: str
   await runFfmpeg(['-y', ...inputs, '-filter_complex', `${chains.join(';')};${concat}`, '-map', '[out]', out]);
 }
 
-export async function startPackage(req: PackageRequest, o: { dataDir: string; root: string; narration?: Narration }): Promise<PackageJob> {
+export async function startPackage(req: PackageRequest, o: { dataDir: string; root: string; narration?: Narration; extras?: RenderExtras }): Promise<PackageJob> {
   const bad = validatePackage(req, !!o.narration);
   if (bad) throw new Error(bad);
   if ([...jobs.values()].some((j) => j.status === 'working')) throw new Error('Ya se están generando entregables; espera a que terminen');
@@ -94,7 +94,7 @@ export async function startPackage(req: PackageRequest, o: { dataDir: string; ro
   return job;
 }
 
-async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: string; root: string; narration?: Narration }, dir: string): Promise<void> {
+async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: string; root: string; narration?: Narration; extras?: RenderExtras }, dir: string): Promise<void> {
   const base = slug(req.title);
   const theme = req.theme ?? THEME;
   const withCard = (scenes: Scene[]): VideoSpec['scenes'] => (req.card ? [...scenes, { ...req.card, card: true }] : scenes);
@@ -108,7 +108,7 @@ async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: strin
     item.files.push({ name, url: `/api/deliverable/${job.id}/${name}?dl=1`, kind });
   };
   const video = async (item: PackageItem, spec: VideoSpec, name: string, share: [number, number]) => {
-    const r = await startRender(spec, 'final', o.dataDir, o.root, o.narration);
+    const r = await startRender(spec, 'final', o.dataDir, o.root, o.narration, o.extras);
     await waitForRender(o.dataDir, r.id, (p) => (item.progress = Math.round(share[0] + ((share[1] - share[0]) * p) / 100)));
     item.files.push({ name, url: `/api/render/${r.id}/file?dl=1&name=${name}`, kind: 'video' });
   };

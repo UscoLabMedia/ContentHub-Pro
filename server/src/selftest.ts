@@ -11,7 +11,7 @@ import {
 } from '@chp/core';
 import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
 import { checkSource } from './verify.ts';
-import { FONTS, searchArt, searchFree, searchMusic } from '@chp/core';
+import { FONTS, SFX_LIBRARY, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
 import { existsSync } from 'node:fs';
 
 export type Status = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skip';
@@ -157,6 +157,10 @@ export const CHECKS: Check[] = [
     const missing = FONTS.filter((f) => f.id !== 'system' && !existsSync(join(c.root, 'node_modules', '@fontsource', f.id))).map((f) => f.label);
     if (missing.length) throw new Error(`Faltan: ${missing.join(', ')}. Vuelve a abrir con ContentHub.bat para reinstalar.`);
     return `${FONTS.length - 1} fuentes libres listas`;
+  } },
+  { id: 'sfx', label: 'Efectos de sonido (generados en tu PC)', group: 'Video', run: async () => {
+    for (const x of SFX_LIBRARY) if (synthSfx(x.id).length < 100) throw new Error(`El sonido «${x.label}» salió vacío`);
+    return `${SFX_LIBRARY.length} sonidos generados correctamente`;
   } },
   { id: 'thumbnail', label: 'Miniatura (imagen 1280×720)', group: 'Video', run: async (c) => {
     if (!c.full) throw new Skip('Solo en la prueba completa');

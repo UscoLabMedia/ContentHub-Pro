@@ -14,7 +14,8 @@
     "./motion": "./src/motion.ts",
     "./illustrations": "./src/illustrations.ts",
     "./subtitles": "./src/subtitles.ts",
-    "./music": "./src/music.ts"
+    "./music": "./src/music.ts",
+    "./sfx": "./src/sfx.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

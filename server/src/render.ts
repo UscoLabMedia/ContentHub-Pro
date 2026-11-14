@@ -6,6 +6,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { validateSpec, type Tts, type VideoSpec } from '@chp/core';
+import { buildSfxTrack, type SfxHook } from './sfx.ts';
 
 export interface RenderJob {
   id: string;
@@ -134,18 +135,23 @@ export function renderFrame(spec: VideoSpec, outFile: string, dataDir: string, r
   return job;
 }
 
-export async function startRender(spec: VideoSpec, quality: 'draft' | 'final', dataDir: string, root: string, narration?: Narration): Promise<RenderJob> {
+export interface RenderExtras {
+  /** Sound-effects plan; the track is built from the final timeline (after the narration stretched the scenes). */
+  sfx?: SfxHook;
+}
+
+export async function startRender(spec: VideoSpec, quality: 'draft' | 'final', dataDir: string, root: string, narration?: Narration, extras?: RenderExtras): Promise<RenderJob> {
   const bad = validateSpec(spec);
   if (bad) throw new Error(bad);
   if ([...jobs.values()].some((j) => j.status === 'rendering')) throw new Error('Ya hay un render en curso; espera a que termine');
   const id = randomBytes(8).toString('hex');
   const job: RenderJob = { id, status: 'rendering', progress: 1, quality, label: narration ? 'Generando la voz' : 'Renderizando' };
   jobs.set(id, job);
-  void run(job, spec, quality, dataDir, root, narration);
+  void run(job, spec, quality, dataDir, root, narration, extras);
   return job;
 }
 
-async function run(job: RenderJob, input: VideoSpec, quality: 'draft' | 'final', dataDir: string, root: string, narration?: Narration): Promise<void> {
+async function run(job: RenderJob, input: VideoSpec, quality: 'draft' | 'final', dataDir: string, root: string, narration?: Narration, extras?: RenderExtras): Promise<void> {
   const id = job.id;
   const fail = (e: unknown) => Object.assign(job, { status: 'error', error: e instanceof Error ? e.message : String(e) });
   let spec = input;
@@ -153,6 +159,11 @@ async function run(job: RenderJob, input: VideoSpec, quality: 'draft' | 'final',
   try {
     if (narration) {
       spec = (await narrateScenes(input, narration, (p) => (job.progress = 1 + Math.round(p * 14)))).spec;
+    }
+    if (extras?.sfx) {
+      job.label = 'Preparando efectos de sonido';
+      const hash = await buildSfxTrack(dataDir, spec.scenes, spec.style as never, extras.sfx.config);
+      if (hash) spec = { ...spec, sfx: { url: extras.sfx.url(hash) } };
     }
     job.label = 'Renderizando';
     await mkdir(join(dataDir, 'renders'), { recursive: true });
