@@ -1,6 +1,6 @@
 # PROGRESS
 
-Estado del proyecto. Estado vigente: **`main`** (PRs #1–#20 fusionados). Cada fase nueva va en su propia rama y PR. Actualizar en cada PR.
+Estado del proyecto. Estado vigente: **`main`** (PRs #1–#22 fusionados). Cada fase nueva va en su propia rama y PR. Actualizar en cada PR.
 
 ## PRs fusionados
 
@@ -31,11 +31,15 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#20 fusionados). Cada 
 
 | #20 | `feat/carousel` | Carrusel de Instagram 4:5 (1080×1350): láminas desde las escenas, editor, PNG numerados + .zip + pie sugerido | fusionado |
 
-| — | `feat/projects` | Gestor de proyectos: crear, abrir, renombrar, duplicar, plantilla, archivar, exportar/importar y eliminar (con sus archivos huérfanos) | en revisión (PR sin abrir) |
+| #22 | `feat/projects` | Gestor de proyectos: crear, abrir, renombrar, duplicar, plantilla, archivar, exportar/importar y eliminar (con sus archivos huérfanos) | fusionado |
 
 ## Decisiones tomadas (no volver a preguntar)
 
+<<<<<<< HEAD
 - Gestor de proyectos (elegido por el usuario): pantalla de inicio con tarjetas + selector en la cabecera; nuevo proyecto en blanco pidiendo solo un nombre (o desde plantilla); eliminar borra todo lo suyo con confirmación escribiendo el nombre; extras: duplicar, plantilla desde un proyecto, archivar, exportar/importar un solo proyecto.
+=======
+- Descartado por el usuario: cortes de clips del podcast y publicación automática. No proponerlos.
+>>>>>>> origin/chore/progress-descartados
 - Voz: local gratis + opción en línea después. Audio de revisión: cifrado y temporal.
 - Revisión de transcripción: solo los tramos elegidos. Entregables: todas las opciones, seleccionables.
 - Verificación: búsqueda gratis primero, IA solo para lo pendiente; sin buscador con clave; el render se bloquea con escenas pendientes.
@@ -56,9 +60,8 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#20 fusionados). Cada 
 - CARRUSEL DE INSTAGRAM: HECHO y fusionado (PR #20, `feat/carousel`). Láminas locales desde las escenas (portada = gancho, cierre = llamada a la acción, textos largos divididos a ≤160 caracteres, máx. 20; lámina final de «Fuentes» si hay créditos), editables/reordenables/quitables en el paso 9 con vista previa por lámina; estilo del usuario + ilustración o cuadro del B-roll de la escena; numeración 1/N y flecha; sin número gigante. Entrega: PNG numerados + .zip (sin compresión, `core/src/zip.ts`) + `-pie.md` con créditos. Código: `core/src/carousel.ts`, composición `video/src/Carousel.tsx` (un fotograma por lámina, `--sequence`), modo `carousel`/`cslide` en `video/render.mjs`, `server/src/render.ts` (`renderCarousel`), entregable `carousel`, check `carousel` en «Probar todo». La verificación documental se aplica por lámina (`carouselGate`: un texto editado o dividido con cifras sin verificar queda pendiente). El paso 9 ya no exige borrador aprobado si solo se marcan carrusel, miniatura o descripción.
   - Sin probar: lámina con cuadro de B-roll real (solo ilustración con SVG de prueba), el check «Probar todo» completo en el PC del usuario y la interfaz del editor en navegador (typecheck y tests sí pasan).
   - Opcional más adelante (no elegido): 1:1, 9:16 y PDF.
-- Otros pendientes menores: cortes de clips del podcast (paso 1: archivos propios), publicación automática (cada plataforma exige credenciales propias).
 
-- GESTOR DE PROYECTOS: HECHO en `feat/projects` (pendiente de PR). En la bóveda: `projects` (índice + proyecto actual) y `project:<id>` por proyecto; el proyecto único de versiones anteriores se migra solo a «primer proyecto». Lógica pura y probada en `core/src/projects.ts`; endpoints `/api/projects*` en `server/src/main.ts` (el servidor lee verificación, ilustraciones, B-roll, música y SFX del proyecto *actual*; abrir un proyecto se lo avisa); pantalla `app/src/components/Projects.tsx` y selector en `App.tsx`. Al eliminar solo se borran los archivos que ningún otro proyecto usa (ilustraciones, B-roll, música, borradores y entregables); duplicar comparte archivos y olvida borradores/entregables; exportar/importar lleva guion, escenas, estilo y verificaciones, no los archivos del PC. Las fuentes subidas (paso 1) siguen siendo una biblioteca común a todos los proyectos y no se borran con ellos; un proyecto importado no conserva su fuente. Sin probar: borrado real de archivos en disco con B-roll/música reales (solo probado en la lógica pura) y exportar/importar entre dos PCs.
+- GESTOR DE PROYECTOS: HECHO y fusionado (PR #22, `feat/projects`). En la bóveda: `projects` (índice + proyecto actual) y `project:<id>` por proyecto; el proyecto único de versiones anteriores se migra solo a «primer proyecto». Lógica pura y probada en `core/src/projects.ts`; endpoints `/api/projects*` en `server/src/main.ts` (el servidor lee verificación, ilustraciones, B-roll, música y SFX del proyecto *actual*; abrir un proyecto se lo avisa); pantalla `app/src/components/Projects.tsx` y selector en `App.tsx`. Al eliminar solo se borran los archivos que ningún otro proyecto usa (ilustraciones, B-roll, música, borradores y entregables); duplicar comparte archivos y olvida borradores/entregables; exportar/importar lleva guion, escenas, estilo y verificaciones, no los archivos del PC. Las fuentes subidas (paso 1) siguen siendo una biblioteca común a todos los proyectos y no se borran con ellos; un proyecto importado no conserva su fuente. Sin probar: borrado real de archivos en disco con B-roll/música reales (solo probado en la lógica pura) y exportar/importar entre dos PCs.
 
 ## Límites conocidos / sin verificar
 
