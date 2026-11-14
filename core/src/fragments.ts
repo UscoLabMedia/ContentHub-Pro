@@ -21,6 +21,9 @@ export interface SceneOriginal {
   endSec: number;
   trimSilence?: boolean;
   fadeMs?: number;
+  /** This scene continues the audio of the previous / next scene of the same fragment: no fade and no pause removal at that end. */
+  joinStart?: boolean;
+  joinEnd?: boolean;
 }
 
 /** A fragment as the person edits it. `text` is what is said (shown as subtitles and used as the script). */
@@ -33,6 +36,8 @@ export interface Fragment {
   trimSilence: boolean;
   /** The person corrected the text: it is no longer refreshed from the transcript when the range changes. */
   edited?: boolean;
+  /** Transcript segments inside the range (fetched with the text): where the fragment is split into scenes. */
+  segs?: { start: number; end: number; text: string }[];
 }
 
 const round = (n: number, d = 3) => Math.round(n * 10 ** d) / 10 ** d;
@@ -53,13 +58,78 @@ export const fragmentLength = (f: Pick<Fragment, 'startSec' | 'endSec'>): number
 /** The script is simply what the fragments say, in order (long ones split into sentences, so a synthetic voice can also read it). */
 export const fragmentsScript = (fragments: Fragment[]): string => fragments.flatMap((f) => splitText(f.text)).join('\n');
 
-/** One scene per fragment, in order; its audio is cut from the original when rendering. */
-export function fragmentsToScenes(fragments: Fragment[], fadeMs = FADE_MS_DEFAULT): Scene[] {
-  return fragments.map((f) => ({
-    text: f.text.replace(/\s+/g, ' ').trim(),
-    durationSec: fragmentLength(f),
-    original: { sourceId: f.sourceId, startSec: round(f.startSec), endSec: round(f.endSec), trimSilence: f.trimSilence || undefined, fadeMs },
+export const SCENE_TARGET_SEC = 8;
+/** The render accepts up to 60 scenes; stay well under it however long the audio is. */
+const MAX_SCENES = 50;
+
+export interface ScenePart {
+  startSec: number;
+  endSec: number;
+  text: string;
+}
+
+/**
+ * Splits a fragment into scenes at the boundaries between transcript segments (real times, never mid-word).
+ * The parts are contiguous: put together they are exactly the fragment's audio. A part lasts up to `maxSec`
+ * (a single longer segment stays whole).
+ */
+export function splitIntoScenes(segments: Segment[], startSec: number, endSec: number, maxSec = SCENE_TARGET_SEC): ScenePart[] {
+  const segs = segmentsIn(segments, startSec, endSec);
+  if (!segs.length) return [{ startSec, endSec, text: '' }];
+  const groups: Segment[][] = [];
+  for (const s of segs) {
+    const cur = groups[groups.length - 1];
+    if (cur && s.end - cur[0]!.start <= maxSec) cur.push(s);
+    else groups.push([s]);
+  }
+  return groups.map((g, k) => ({
+    startSec: k === 0 ? startSec : g[0]!.start,
+    endSec: k === groups.length - 1 ? endSec : groups[k + 1]![0]!.start,
+    text: g.map((x) => x.text.replace(/\s+/g, ' ').trim()).join(' '),
   }));
+}
+
+/**
+ * Gives each part its share of a text the person corrected: the words keep their order and each part gets as many as
+ * the transcript had there (proportionally). Null when there are fewer words than parts.
+ */
+export function distributeText(text: string, parts: ScenePart[]): string[] | null {
+  const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  if (words.length < parts.length) return null;
+  const weights = parts.map((p) => Math.max(1, p.text.split(' ').filter(Boolean).length));
+  const total = weights.reduce((a, b) => a + b, 0);
+  const out: string[] = [];
+  let at = 0;
+  let acc = 0;
+  parts.forEach((_, i) => {
+    acc += weights[i]!;
+    const upto = i === parts.length - 1 ? words.length : Math.min(words.length - (parts.length - 1 - i), Math.max(at + 1, Math.round((acc / total) * words.length)));
+    out.push(words.slice(at, upto).join(' '));
+    at = upto;
+  });
+  return out;
+}
+
+/**
+ * The scenes of the video: every fragment is divided into scenes (about `SCENE_TARGET_SEC` each, longer when the
+ * audio is very long) whose audio is continuous; each scene shows what is said in it.
+ */
+export function fragmentsToScenes(fragments: Fragment[], fadeMs = FADE_MS_DEFAULT): Scene[] {
+  const total = fragments.reduce((n, f) => n + (f.endSec - f.startSec), 0);
+  const maxSec = Math.max(SCENE_TARGET_SEC, total / MAX_SCENES);
+  return fragments.flatMap((f): Scene[] => {
+    const text = f.text.replace(/\s+/g, ' ').trim();
+    const whole = (): Scene => ({ text, durationSec: fragmentLength(f), original: { sourceId: f.sourceId, startSec: round(f.startSec), endSec: round(f.endSec), trimSilence: f.trimSilence || undefined, fadeMs } });
+    const parts = f.segs?.length ? splitIntoScenes(f.segs as Segment[], f.startSec, f.endSec, maxSec) : [];
+    if (parts.length < 2) return [whole()];
+    const texts = f.edited ? distributeText(text, parts) : parts.map((p) => p.text);
+    if (!texts || texts.some((t) => !t.trim())) return [whole()];
+    return parts.map((p, i) => ({
+      text: texts[i]!,
+      durationSec: round(p.endSec - p.startSec, 1),
+      original: { sourceId: f.sourceId, startSec: round(p.startSec), endSec: round(p.endSec), trimSilence: f.trimSilence || undefined, fadeMs, joinStart: i > 0 || undefined, joinEnd: i < parts.length - 1 || undefined },
+    }));
+  });
 }
 
 /** Text of a time range: the transcript segments whose middle falls inside it (same rule as `fragmentWordTimes`). */
@@ -92,9 +162,9 @@ export function parseSilences(log: string, endSec: number): Span[] {
 
 /**
  * The parts to cut out so long pauses become short ones (about `keepSec`). Times are relative to the clip.
- * A pause at the very start or end is removed completely: nothing useful comes before the first or after the last word.
+ * A pause at the very start or end of a fragment is removed completely: nothing useful comes before the first or after the last word.
  */
-export function silenceCuts(silences: Span[], clipSec: number, o: { minSec?: number; keepSec?: number } = {}): Span[] {
+export function silenceCuts(silences: Span[], clipSec: number, o: { minSec?: number; keepSec?: number; trimStart?: boolean; trimEnd?: boolean } = {}): Span[] {
   const minSec = o.minSec ?? SILENCE_MIN_SEC;
   const keep = o.keepSec ?? SILENCE_KEEP_SEC;
   const cuts: Span[] = [];
@@ -102,8 +172,9 @@ export function silenceCuts(silences: Span[], clipSec: number, o: { minSec?: num
     const from = Math.max(0, s.from);
     const to = Math.min(clipSec, s.to);
     if (to - from < minSec) continue;
-    const head = from <= 0.001 ? 0 : keep / 2;
-    const tail = to >= clipSec - 0.001 ? 0 : keep / 2;
+    // at a join with another scene of the same fragment the pause is shortened like any other, never removed
+    const head = from <= 0.001 && o.trimStart !== false ? 0 : keep / 2;
+    const tail = to >= clipSec - 0.001 && o.trimEnd !== false ? 0 : keep / 2;
     const cut = { from: round(from + head), to: round(to - tail) };
     const last = cuts[cuts.length - 1];
     if (cut.to - cut.from > 0.02 && (!last || cut.from >= last.to)) cuts.push(cut);
@@ -164,22 +235,22 @@ export function fragmentWordTimes(text: string, segments: Segment[], startSec: n
 }
 
 /** Stable key of a clip (same source, range and options = same audio file, so repeats are free). */
-export const clipKey = (o: SceneOriginal): string => `orig|v1|${o.sourceId}|${round(o.startSec)}|${round(o.endSec)}|${o.trimSilence ? 1 : 0}|${o.fadeMs ?? FADE_MS_DEFAULT}`;
+export const clipKey = (o: SceneOriginal): string => `orig|v2|${o.sourceId}|${round(o.startSec)}|${round(o.endSec)}|${o.trimSilence ? 1 : 0}|${o.fadeMs ?? FADE_MS_DEFAULT}|${o.joinStart ? 1 : 0}${o.joinEnd ? 1 : 0}`;
 
 // ---------------------------------------------------------------------------- fades
 /**
  * Short linear fades at the start and end of a 16-bit WAV so a cut never clicks. Done on the samples themselves
  * (the ffmpeg bundled with Remotion has no fade filter). It is the only change made to the sound, and only `fadeMs` long.
  */
-export function fadeWav(wav: Uint8Array, fadeMs: number): Buffer {
+export function fadeWav(wav: Uint8Array, fadeMs: number, edges: { in?: boolean; out?: boolean } = {}): Buffer {
   const { rate, channels, data } = readPcm16(wav);
   const frames = Math.floor(data.length / (2 * channels));
   const n = Math.min(Math.round((Math.max(0, fadeMs) / 1000) * rate), Math.floor(frames / 2));
   if (n <= 0) return wavFromPcm16(rate, channels, Buffer.from(data));
   const out = Buffer.from(data);
   for (let i = 0; i < n; i++) {
-    const gIn = i / n;
-    const gOut = (n - 1 - i) / n;
+    const gIn = edges.in === false ? 1 : i / n;
+    const gOut = edges.out === false ? 1 : (n - 1 - i) / n;
     for (let c = 0; c < channels; c++) {
       const a = (i * channels + c) * 2;
       const b = ((frames - n + i) * channels + c) * 2;

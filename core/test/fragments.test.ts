@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FADE_MS_DEFAULT, clipKey, fragmentWordTimes, fragmentsScript, fragmentsToScenes, keepSpans, mapTime, outLength, parseSilences, segmentsIn, silenceCuts, textForRange,
-  fadeWav, readPcm16, validateOriginal, validateSpec, wavFromPcm16, type Fragment, type Segment, type VideoSpec,
+  distributeText, fadeWav, readPcm16, splitIntoScenes, validateOriginal, validateSpec, wavFromPcm16, type Fragment, type Segment, type VideoSpec,
 } from '../src/index.ts';
 
 const SRC = 'a1b2c3d4e5f60718';
@@ -152,5 +152,71 @@ describe('fades', () => {
     const r = readPcm16(fadeWav(w, 200));
     expect(r.data.length).toBe(readPcm16(w).data.length);
     expect(r.channels).toBe(1);
+  });
+});
+
+describe('a fragment is divided into scenes', () => {
+  const seg = (start: number, end: number, text: string) => ({ start, end, text });
+  const segs = [seg(0, 4, 'Hola a todos.'), seg(6.5, 10.5, 'Hoy hablamos del café.'), seg(10.5, 14, 'Gracias por escuchar.'), seg(20, 24, 'Fuera del rango.')];
+  it('cuts at segment boundaries, contiguous: the parts together are exactly the fragment', () => {
+    const p = splitIntoScenes(segs, 0, 14, 8);
+    expect(p.map((x) => x.text)).toEqual(['Hola a todos.', 'Hoy hablamos del café. Gracias por escuchar.']);
+    expect(p[0]!.startSec).toBe(0);
+    expect(p[0]!.endSec).toBe(p[1]!.startSec); // no audio lost between scenes
+    expect(p[0]!.endSec).toBe(6.5);
+    expect(p[1]!.endSec).toBe(14);
+    expect(p.every((x) => x.endSec - x.startSec <= 8 || false)).toBe(true);
+  });
+  it('a larger target gives fewer scenes; a single long segment stays whole', () => {
+    expect(splitIntoScenes(segs, 0, 14, 30)).toHaveLength(1);
+    expect(splitIntoScenes([seg(0, 40, 'Una intervención larguísima')], 0, 40, 8)).toHaveLength(1);
+  });
+  it('without transcript there is one part', () => {
+    expect(splitIntoScenes([], 3, 9)).toEqual([{ startSec: 3, endSec: 9, text: '' }]);
+  });
+  it('shares a corrected text among the parts in order, or says it cannot', () => {
+    const parts = splitIntoScenes(segs, 0, 14, 5);
+    expect(parts).toHaveLength(3);
+    const t = distributeText('uno dos tres cuatro cinco seis', parts)!;
+    expect(t.join(' ')).toBe('uno dos tres cuatro cinco seis');
+    expect(t.every((x) => x.length > 0)).toBe(true);
+    expect(distributeText('solo dos', parts)).toBeNull();
+  });
+  const fragSegs = (over: Partial<Fragment> = {}): Fragment => ({ id: 'f', sourceId: SRC, startSec: 0, endSec: 14, text: 'Hola a todos. Hoy hablamos del café. Gracias por escuchar.', trimSilence: true, segs, ...over });
+  it('turns a fragment into several scenes whose audio continues from one to the next', () => {
+    const sc = fragmentsToScenes([fragSegs()]);
+    expect(sc).toHaveLength(2);
+    expect(sc.map((x) => x.text)).toEqual(['Hola a todos.', 'Hoy hablamos del café. Gracias por escuchar.']);
+    expect(sc[0]!.original).toMatchObject({ startSec: 0, endSec: 6.5, joinEnd: true });
+    expect(sc[0]!.original!.joinStart).toBeUndefined();
+    expect(sc[1]!.original).toMatchObject({ startSec: 6.5, endSec: 14, joinStart: true });
+    expect(sc[1]!.original!.joinEnd).toBeUndefined();
+    expect(sc.reduce((n, x) => n + x.original!.endSec - x.original!.startSec, 0)).toBeCloseTo(14, 6);
+    expect(sc.every((x) => x.original!.trimSilence === true)).toBe(true);
+  });
+  it('keeps one scene when there is no transcript timing, and respects a corrected text', () => {
+    expect(fragmentsToScenes([fragSegs({ segs: undefined })])).toHaveLength(1);
+    const e = fragmentsToScenes([fragSegs({ edited: true, text: 'Hola a todos amigos. Hoy hablamos del buen café. Gracias.' })]);
+    expect(e).toHaveLength(2);
+    expect(e.map((x) => x.text).join(' ')).toBe('Hola a todos amigos. Hoy hablamos del buen café. Gracias.');
+    expect(fragmentsToScenes([fragSegs({ edited: true, text: 'una' })])).toHaveLength(1); // fewer words than scenes
+  });
+  it('never makes more scenes than the render accepts, however long the audio is', () => {
+    const many = Array.from({ length: 900 }, (_, i) => seg(i * 4, i * 4 + 3.8, `Frase número ${i}.`)); // 1 hour
+    const sc = fragmentsToScenes([{ id: 'x', sourceId: SRC, startSec: 0, endSec: 3600, text: 'x', trimSilence: false, segs: many }]);
+    expect(sc.length).toBeLessThanOrEqual(50);
+    expect(sc.length).toBeGreaterThan(10);
+    expect(validateSpec({ preset: 'youtube_long', scenes: sc })).toMatch(/Dura más de lo permitido/); // an hour is over the 15 min of that format: the format's total limit still applies
+    expect(validateSpec({ preset: 'youtube_long', scenes: sc.slice(0, 5) })).toBeNull();
+  });
+  it('the cut and the fades know which ends are joins', () => {
+    expect(silenceCuts([{ from: 0, to: 2 }], 10, { trimStart: false })).toEqual([{ from: 0.125, to: 1.875 }]); // joined start: kept like an inner pause
+    expect(silenceCuts([{ from: 0, to: 2 }], 10)).toEqual([{ from: 0, to: 1.875 }]); // fragment start: removed completely
+    expect(silenceCuts([{ from: 8, to: 10 }], 10, { trimEnd: false })).toEqual([{ from: 8.125, to: 9.875 }]);
+    const loud = (() => { const d = Buffer.alloc(44100 * 2 * 2); for (let i = 0; i < 44100 * 2; i++) d.writeInt16LE(10000, i * 2); return wavFromPcm16(44100, 2, d); })();
+    const { data } = readPcm16(fadeWav(loud, 20, { in: false }));
+    expect(data.readInt16LE(0)).toBe(10000); // joined start: untouched
+    expect(data.readInt16LE(data.length - 2)).toBe(0); // free end: faded
+    expect(clipKey({ sourceId: SRC, startSec: 0, endSec: 5 })).not.toBe(clipKey({ sourceId: SRC, startSec: 0, endSec: 5, joinStart: true }));
   });
 });

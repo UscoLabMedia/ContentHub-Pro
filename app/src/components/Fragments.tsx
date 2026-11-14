@@ -61,7 +61,11 @@ export function Fragments({ project, set }: P) {
     apply(a);
   };
 
-  const add = (list: Omit<Fragment, 'id' | 'trimSilence'>[]) => apply([...live.current.fragments, ...list.map((f) => ({ ...f, id: newId(), trimSilence: false }))]);
+  /** Adds fragments with the transcript segments of their range: that is where each one is divided into scenes. */
+  const add = async (list: Omit<Fragment, 'id' | 'trimSilence' | 'segs'>[]) => {
+    const made = await Promise.all(list.map(async (f) => ({ ...f, id: newId(), trimSilence: false, segs: (await api<{ segs: Fragment['segs'] }>(`/api/sources/${f.sourceId}/text?start=${f.startSec}&end=${f.endSec}`).catch(() => ({ segs: undefined }))).segs })));
+    apply([...live.current.fragments, ...made]);
+  };
   const addLines = () => {
     if (!data || !src) return;
     const ids = [...picked].sort((a, b) => a - b);
@@ -72,12 +76,12 @@ export function Fragments({ project, set }: P) {
       if (last && last[last.length - 1]!.id === id - 1) last.push(line);
       else groups.push([line]);
     }
-    add(groups.map((g) => ({ sourceId: src.id, startSec: g[0]!.start, endSec: g[g.length - 1]!.end, text: g.map((l) => l.text).join(' ') })));
+    void add(groups.map((g) => ({ sourceId: src.id, startSec: g[0]!.start, endSec: g[g.length - 1]!.end, text: g.map((l) => l.text).join(' ') })));
     setPicked(new Set());
   };
   const addConfirmed = () => {
     if (!data || !src) return;
-    add(data.selection.filter((b) => b.status !== 'unclear' && b.text.trim()).map((b) => ({ sourceId: src.id, startSec: b.startSec, endSec: b.endSec, text: b.text, edited: b.status === 'corrected' || undefined })));
+    void add(data.selection.filter((b) => b.status !== 'unclear' && b.text.trim()).map((b) => ({ sourceId: src.id, startSec: b.startSec, endSec: b.endSec, text: b.text, edited: b.status === 'corrected' || undefined })));
   };
   const addManual = async () => {
     if (!src) return;
@@ -86,7 +90,7 @@ export function Fragments({ project, set }: P) {
     if (!(b - a >= MIN_CLIP_SEC)) return setErr('El fin debe ser mayor que el inicio');
     setErr('');
     const r = await api<{ text: string }>(`/api/sources/${src.id}/text?start=${a}&end=${b}`).catch(() => ({ text: '' }));
-    add([{ sourceId: src.id, startSec: a, endSec: b, text: r.text }]);
+    await add([{ sourceId: src.id, startSec: a, endSec: b, text: r.text }]);
   };
 
   const listen = async (f: Fragment) => {
@@ -179,11 +183,15 @@ export function Fragments({ project, set }: P) {
 }
 
 function Row({ f, i, n, file, busy, onChange, onMove, onListen, onRepeat, onRemove }: { f: Fragment; i: number; n: number; file: string; busy: boolean; onChange: (p: Partial<Fragment>) => void; onMove: (d: number) => void; onListen: () => void; onRepeat: () => void; onRemove: () => void }) {
-  // Until the person corrects the text, it follows the transcript when they move the start or end.
+    // The transcript segments of the range always follow it (they decide the scenes), corrected or not.
   useEffect(() => {
-    if (f.edited) return;
     const t = setTimeout(() => {
-      api<{ text: string }>(`/api/sources/${f.sourceId}/text?start=${f.startSec}&end=${f.endSec}`).then((r) => r.text && r.text !== f.text && onChange({ text: r.text })).catch(() => {});
+      api<{ text: string; segs: Fragment['segs'] }>(`/api/sources/${f.sourceId}/text?start=${f.startSec}&end=${f.endSec}`).then((r) => {
+        const patch: Partial<Fragment> = {};
+        if (JSON.stringify(r.segs) !== JSON.stringify(f.segs)) patch.segs = r.segs;
+        if (!f.edited && r.text && r.text !== f.text) patch.text = r.text;
+        if (Object.keys(patch).length) onChange(patch);
+      }).catch(() => {});
     }, 600);
     return () => clearTimeout(t);
   }, [f.startSec, f.endSec]); // eslint-disable-line react-hooks/exhaustive-deps

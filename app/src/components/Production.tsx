@@ -82,10 +82,15 @@ export function StepProduction({ project, set }: P) {
   const total = totalDuration(prod.scenes);
   const setProd = (patch: Partial<Project['production']>) => set({ ...project, production: { ...prod, ...patch } });
   const original = project.voice.mode === 'original';
-  const fromScript = () => setProd({ scenes: original ? scenesFor(project, 'original') : scriptToScenes(project.script.text), preset: presetOf(project) });
+  const fromScript = async () => {
+    if (!original) return setProd({ scenes: scriptToScenes(project.script.text), preset: presetOf(project) });
+    // fragments saved before scenes were split have no transcript segments yet: fetch them so every fragment is divided
+    const fragments = await Promise.all(project.fragments.map(async (f) => (f.segs ? f : { ...f, segs: (await api<{ segs: typeof f.segs }>(`/api/sources/${f.sourceId}/text?start=${f.startSec}&end=${f.endSec}`).catch(() => ({ segs: undefined }))).segs })));
+    set({ ...project, fragments, production: { ...prod, preset: presetOf(project), scenes: scenesFor(project, 'original', fragments) } });
+  };
 
   useEffect(() => {
-    if (!prod.scenes.length && project.script.text.trim()) fromScript();
+    if (!prod.scenes.length && project.script.text.trim()) void fromScript();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -108,7 +113,7 @@ export function StepProduction({ project, set }: P) {
             ))}
           </select>
         </label>
-        <button className={secondary} onClick={fromScript}>{original ? 'Rehacer desde mis fragmentos' : 'Rehacer desde el guion'}</button>
+        <button className={secondary} onClick={() => void fromScript()}>{original ? 'Rehacer desde mis fragmentos' : 'Rehacer desde el guion'}</button>
       </div>
       <p className="text-xs text-slate-400">Máximo 1080p (pensado para celular). Los carruseles de imágenes llegan en una próxima etapa.</p>
 
