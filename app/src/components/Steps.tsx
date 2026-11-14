@@ -5,6 +5,7 @@ import { api } from '../api.ts';
 import { useTask } from '../ai.ts';
 import { Radar } from './Radar.tsx';
 import { Sources } from './Sources.tsx';
+import { Fragments } from './Fragments.tsx';
 import { gate } from '@chp/core/verification';
 import { specKey, type Project } from '../project.ts';
 
@@ -52,6 +53,7 @@ export function Step2({ project, set }: P) {
       <Head n={2} title="Tratamiento viral" hint={`Tema: ${project.topic || '—'}`} />
       {project.topicEvidence.length > 0 && <p className="text-[11px] text-slate-500">Datos del tema: {project.topicEvidence.map((e) => `${e.source}${e.metric ? ` (${e.metric})` : ''}`).join(' · ')}</p>}
       <button className={primary} disabled={!project.topic || t.state.status === 'loading'} onClick={() => void t.run({ topic: project.topic })}>Proponer tratamientos</button>
+      <button className="ml-2 rounded-lg border border-slate-700 px-3 py-2 text-xs hover:bg-slate-800" onClick={() => set({ ...project, treatment: project.treatment || 'Mis propios audios (sin tratamiento de IA)' })}>Saltar: usaré mis propios audios</button>
       <Status s={t.state} />
       {t.state.status === 'ok' && t.state.data.options.map((o) => (
         <button key={o.id} className={card(project.treatment === o.title)} onClick={() => set({ ...project, treatment: o.title })}>
@@ -126,6 +128,7 @@ type Script = z.infer<typeof ScriptOut>['options'][number];
 const scriptToText = (o: Script) => [`GANCHO: ${o.hook}`, ...o.beats.map((b) => `[${b.tSec}s] ${b.text}  (visual: ${b.visual})`), `CTA: ${o.cta}`, `CAPTION: ${o.caption}`].join('\n');
 
 export function Step5({ project, set }: P) {
+  const [tab, setTab] = useState<'ai' | 'audio'>(project.fragments.length > 0 && project.voice.mode === 'original' ? 'audio' : 'ai');
   const t = useTask<z.infer<typeof ScriptOut>>('script');
   const generate = async () => {
     // When the idea came from the user's own file, give the model the real passage (bounded server-side).
@@ -136,7 +139,13 @@ export function Step5({ project, set }: P) {
   };
   return (
     <div className="space-y-5">
-      <Head n={5} title="Guiones y copys" hint="Dos opciones; elige una y ajústala. Este texto alimentará la producción de video." />
+      <Head n={5} title="Guiones y copys" hint="Escríbelo con IA o usa fragmentos de tus propios audios. Este texto alimentará la producción de video." />
+      <div role="tablist" className="flex gap-2">
+        {([['ai', 'Escribirlo con IA'], ['audio', 'Usar mis audios']] as const).map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === id ? 'bg-indigo-600' : 'border border-slate-700 hover:bg-slate-800'}`}>{label}</button>
+        ))}
+      </div>
+      {tab === 'audio' ? <Fragments project={project} set={set} /> : (<>
       <button className={primary} disabled={t.state.status === 'loading'} onClick={() => void generate()}>Generar guiones</button>
       <Status s={t.state} />
       {t.state.status === 'ok' && (
@@ -153,6 +162,7 @@ export function Step5({ project, set }: P) {
       <label className="block text-xs font-semibold text-slate-300">Guion final (editable)
         <textarea rows={8} value={project.script.text} onChange={(e) => set({ ...project, script: { ...project.script, text: e.target.value } })} className={`${field} mt-1 font-mono`} />
       </label>
+      </>)}
     </div>
   );
 }
@@ -164,11 +174,11 @@ export const canAdvance = (step: number, p: Project): boolean => {
   const key = specKey(p);
   return [
     !!p.topic.trim(),
-    !!p.treatment,
+    !!p.treatment || p.fragments.length > 0, // with the person's own audio there is nothing to "treat": the fragments are the content
     !!p.audience.anchor.trim(),
     p.platforms.length > 0,
     !!p.script.text.trim(),
-    p.voice.mode === 'silent' || (p.voice.mode === 'narrate' && !!p.voice.voiceId),
+    p.voice.mode === 'silent' || (p.voice.mode === 'narrate' && !!p.voice.voiceId) || (p.voice.mode === 'original' && p.fragments.length > 0),
     p.production.scenes.length > 0 && gate(p.production.scenes, p.verification).ok,
     p.renders.draftApproved && p.renders.draft?.spec === key,
     p.deliverables.result?.key === key && p.deliverables.result.items.some((i) => i.status === 'done'),

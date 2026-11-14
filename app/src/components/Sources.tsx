@@ -75,7 +75,7 @@ export function Sources({ selected, onPick }: { selected: string; onPick: (idea:
             <div className="flex items-center gap-2 text-sm">
               <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] uppercase text-slate-300">{KIND[s.kind]}</span>
               <span className="truncate font-medium">{s.name}</span>
-              <button onClick={() => void api(`/api/sources/${s.id}`, { method: 'DELETE' }).then(load)} className="ml-auto text-xs text-slate-500 hover:text-rose-400">Quitar</button>
+              <button onClick={() => { if (!s.hasOriginal || window.confirm('Se borra también el audio original guardado de este archivo. ¿Continuar?')) void api(`/api/sources/${s.id}`, { method: 'DELETE' }).then(load); }} className="ml-auto text-xs text-slate-500 hover:text-rose-400">Quitar</button>
             </div>
             {s.status === 'processing' && (
               <div>
@@ -89,6 +89,11 @@ export function Sources({ selected, onPick }: { selected: string; onPick: (idea:
             {s.status === 'ready' && (
               <>
                 <p className="text-xs text-slate-400">{s.words.toLocaleString()} palabras{s.timed ? ` · ${mmss(s.durationSec)}` : ''}</p>
+                {(s.kind === 'audio' || s.kind === 'video') && (
+                  <p className={`text-xs ${s.hasOriginal ? 'text-emerald-400' : 'text-slate-500'}`}>
+                    {s.hasOriginal ? 'Audio original guardado (cifrado): puedes usar fragmentos como voz en el paso 5. «Quitar» lo borra.' : 'Sin audio original guardado: para usar tu voz en el video, súbelo de nuevo.'}
+                  </p>
+                )}
                 {(s.kind === 'audio' || s.kind === 'video') && (
                   <p className="text-xs text-slate-300">
                     {s.reviewed ? <span className="text-emerald-400">✓ {s.selectionCount} tramo(s) revisados y confirmados por ti</span> : 'Antes de crear contenido, elige los tramos que usarás y confírmame que la transcripción está bien.'}

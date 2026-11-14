@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { alignWords, normalizeTuning, stripMarkup, validateSlides, validateSpec, type CarouselSpec, type Tts, type VideoSpec } from '@chp/core';
+import { alignWords, normalizeTuning, stripMarkup, validateSlides, validateSpec, type CarouselSpec, type SceneOriginal, type Tts, type VideoSpec } from '@chp/core';
 import { buildSfxTrack, type SfxHook } from './sfx.ts';
 
 export interface RenderJob {
@@ -18,9 +18,12 @@ export interface RenderJob {
 }
 
 export interface Narration {
-  tts: Tts;
-  voiceId: string;
-  speed: number;
+  /** Synthetic voice. Missing when the video uses the person's own audio (`original`). */
+  tts?: Tts;
+  voiceId?: string;
+  speed?: number;
+  /** Cuts the person's own audio for a scene: set when the video is narrated by their original voices. */
+  original?: (o: SceneOriginal, text: string) => Promise<{ file: string; hash: string; durationSec: number; wordTimes?: { from: number; to: number }[] }>;
   /** Semitones (-6..+6) and an Azure speaking style; both optional. */
   pitch?: number;
   style?: string;
@@ -60,7 +63,17 @@ export async function narrateScenes(input: VideoSpec, narration: Narration, onPr
       onProgress?.((i + 1) / input.scenes.length);
       continue;
     }
-    const n = await narration.tts.synth(narration.voiceId, sc.text, normalizeTuning({ speed: narration.speed, pitch: narration.pitch, style: narration.style }));
+    if (sc.original) {
+      // The person's own voice: the scene lasts exactly as long as the cut (frame-accurate, no extra pause), and the text is shown as it is.
+      if (!narration.original) throw new Error('No hay audio original disponible para esta escena');
+      const c = await narration.original(sc.original, sc.text);
+      scenes.push({ ...sc, audioUrl: narration.audioUrl(c.hash), durationSec: Math.ceil(c.durationSec * 30) / 30, speechSec: c.durationSec, ...(c.wordTimes?.length ? { wordTimes: c.wordTimes } : {}) });
+      clips.push({ file: c.file, durationSec: Math.ceil(c.durationSec * 30) / 30 });
+      onProgress?.((i + 1) / input.scenes.length);
+      continue;
+    }
+    if (!narration.tts || !narration.voiceId) throw new Error('Elige una voz en el paso 6');
+    const n = await narration.tts.synth(narration.voiceId, sc.text, normalizeTuning({ speed: narration.speed ?? 1, pitch: narration.pitch, style: narration.style }));
     const durationSec = Math.max(sc.durationSec, Math.ceil((n.durationSec + 0.5) * 10) / 10);
     // The voice is told the marks ([pausa], *énfasis*); the screen shows plain text, with real word times when the voice reports them.
     const text = stripMarkup(sc.text);
@@ -219,7 +232,7 @@ async function run(job: RenderJob, input: VideoSpec, quality: 'draft' | 'final',
       const hash = await buildSfxTrack(dataDir, spec.scenes, spec.style as never, extras.sfx.config);
       if (hash) spec = { ...spec, sfx: { url: extras.sfx.url(hash) } };
     }
-    spec = { ...spec, scenes: spec.scenes.map((sc) => (sc.card ? sc : { ...sc, text: stripMarkup(sc.text) })) }; // silent videos: marks never reach the screen
+    spec = { ...spec, scenes: spec.scenes.map((sc) => (sc.card || sc.original ? sc : { ...sc, text: stripMarkup(sc.text) })) }; // silent videos: marks never reach the screen
     job.label = 'Renderizando';
     await mkdir(join(dataDir, 'renders'), { recursive: true });
     await writeFile(specPath, JSON.stringify(spec));

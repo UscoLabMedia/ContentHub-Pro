@@ -43,7 +43,7 @@ export function StepDeliverables({ project, set }: P) {
   const key = specKey(project);
   const draftOk = project.renders.draftApproved && project.renders.draft?.spec === key;
   const needsDraft = d.selected.some((x) => NEEDS_DRAFT.includes(x));
-  const narrated = !!voiceOf(project);
+  const narrated = !!voiceOf(project) || project.voice.mode === 'original'; // a generated voice, or the person's own audio
   const shorts = d.shorts ?? splitShortRanges(scenes);
   const shortsErr = d.selected.includes('shorts') ? validateShorts(scenes, shorts) : null;
   const slides: SlideDraft[] = d.slides ?? slidesFromScenes(scenes);
@@ -138,7 +138,7 @@ export function StepDeliverables({ project, set }: P) {
                 <span className="flex-1">
                   <span className="text-sm font-semibold">{x.label}</span>
                   <span className="block text-xs text-slate-400">{x.hint}</span>
-                  {disabled && <span className="block text-xs text-amber-400">Elige una voz en el paso 6 para poder exportarla.</span>}
+                  {disabled && <span className="block text-xs text-amber-400">Elige una voz (o tus audios originales) en el paso 6 para poder exportarla.</span>}
                 </span>
               </label>
 

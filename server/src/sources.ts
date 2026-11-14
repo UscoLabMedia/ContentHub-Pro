@@ -23,11 +23,13 @@ export interface SourceRecord {
   segments: Segment[];
   /** Encrypted review copy of the audio (relative to the data dir); removed when the review is finished. */
   audio?: string;
+  /** The audio is kept (encrypted, as uploaded) so fragments of it can be the narration. Removed when the source is deleted. */
+  original?: boolean;
   /** Passages the person chose and confirmed; content is created from these. */
   selection?: ReviewBlock[];
   reviewed?: boolean;
 }
-export type SourceView = Omit<SourceRecord, 'segments' | 'audio' | 'selection'> & { hasAudio: boolean; selectionCount: number };
+export type SourceView = Omit<SourceRecord, 'segments' | 'audio' | 'selection' | 'original'> & { hasAudio: boolean; hasOriginal: boolean; selectionCount: number };
 
 const AUDIO = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.opus', '.flac', '.wma'];
 const VIDEO = ['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v'];
@@ -42,7 +44,7 @@ export function classify(name: string): SourceKind | null {
   return null;
 }
 
-export const toView = ({ segments: _s, audio, selection, ...v }: SourceRecord): SourceView => ({ ...v, reviewed: !!v.reviewed, hasAudio: !!audio, selectionCount: selection?.length ?? 0 });
+export const toView = ({ segments: _s, audio, selection, original, ...v }: SourceRecord): SourceView => ({ ...v, reviewed: !!v.reviewed, hasAudio: !!audio, hasOriginal: !!original, selectionCount: selection?.length ?? 0 });
 
 export const audioPath = (dataDir: string, rec: SourceRecord): string | null => (rec.audio ? join(dataDir, rec.audio) : null);
 
@@ -57,6 +59,8 @@ export async function dropAudio(dataDir: string, rec: SourceRecord): Promise<voi
 export async function processSource(
   rec: SourceRecord, filePath: string, dataDir: string, quality: Quality, done: () => Promise<void>,
   seal?: (data: Uint8Array) => Promise<Uint8Array>,
+  /** Keeps the audio as uploaded (encrypted) for use as narration; resolves to whether it was kept. */
+  keep?: (id: string, filePath: string) => Promise<boolean>,
 ): Promise<void> {
   try {
     let segs: Segment[];
@@ -80,6 +84,7 @@ export async function processSource(
           /* the transcript is still usable; passages just can't be played back */
         }
       }
+      if (keep) rec.original = await keep(rec.id, filePath).catch(() => false);
     } else if (rec.kind === 'subtitles') {
       segs = parseSubtitles(await readFile(filePath, 'utf8'));
     } else if (rec.kind === 'pdf') {

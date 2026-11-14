@@ -23,6 +23,8 @@ export interface SourceView {
   words: number;
   reviewed: boolean;
   hasAudio: boolean;
+  /** The audio is kept (encrypted) so fragments of it can be the narration. */
+  hasOriginal: boolean;
   selectionCount: number;
 }
 

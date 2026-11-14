@@ -11,7 +11,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
   Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
-  OUTPUT_SCHEMAS, slug, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
+  OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderCarouselSlide, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
@@ -27,6 +27,7 @@ import { buildSfxTrack, sfxTrackPath } from './sfx.ts';
 import { downloadMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
 import { ART_MIME, artExists, artPath, artUrl, downloadArt, saveDrawn } from './art.ts';
 import { checkMany } from './verify.ts';
+import { cutClip, dropOriginal, hasOriginal, keepOriginal } from './original.ts';
 import { getPackage, isPackageId, packageDir, startPackage, type PackageRequest } from './deliverables.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -136,6 +137,33 @@ const parseSlides = (raw: unknown, fallback: { text: string }[]): SlideDraft[] =
   Array.isArray(raw) ? raw.slice(0, 40).map((x: { text?: unknown; origin?: unknown }) => ({ text: String(x?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 300), origin: typeof x?.origin === 'string' ? x.origin.slice(0, 300) : undefined })) : slidesFromScenes(fallback);
 const slideMedia = (drafts: SlideDraft[], s: { vault: Vault; token: string }, sourcesText?: string): SlideSpec[] =>
   toSlideSpecs(withBroll(withArt(drafts.map((d) => ({ text: d.origin ?? d.text, durationSec: 3, slideText: d.text })), s), s).map((x) => ({ text: x.slideText, art: x.art, broll: x.broll })), sourcesText);
+/** Cuts the person's own audio for a scene (their real voice, only trimmed). The browser never sends audio, only which part of which file. */
+const originalCutter = (s: { vault: Vault; sources: Map<string, SourceRecord> }) => async (o: SceneOriginal, text?: string) => {
+  const rec = s.sources.get(o.sourceId);
+  if (!rec || !hasOriginal(DATA_DIR, rec.id)) throw new Error('El audio original de un fragmento ya no está guardado. Vuelve a subir ese archivo.');
+  const bad = validateOriginal(o, rec.durationSec);
+  if (bad) throw new Error(bad);
+  return cutClip({ dataDir: DATA_DIR, unseal: (b) => s.vault.openBytes(b), cacheFile: (h) => tts.cacheFile(h), original: o, segments: rec.segments, text });
+};
+/** Keeps each scene's `original` (which part of which file) through the steps that rebuild scenes from text only. */
+const withOriginal = <T extends { text: string; durationSec: number }>(scenes: T[], input: { original?: SceneOriginal }[]): (T & { original?: SceneOriginal })[] =>
+  scenes.map((sc, i) => (input[i]?.original ? { ...sc, original: input[i]!.original } : sc));
+const originalsError = (scenes: { original?: SceneOriginal }[], s: { sources: Map<string, SourceRecord> }): string | null => {
+  for (const sc of scenes) {
+    if (!sc.original) continue;
+    const rec = s.sources.get(sc.original.sourceId);
+    if (!rec || !hasOriginal(DATA_DIR, rec.id)) return 'El audio original de un fragmento ya no está guardado. Vuelve a subir ese archivo.';
+    const bad = validateOriginal(sc.original, rec.durationSec);
+    if (bad) return bad;
+  }
+  return null;
+};
+/** Who narrates: the person's own audio when any scene has `original` (no synthetic voice at all), otherwise the chosen voice, otherwise nobody. */
+const narrationFor = (s: { token: string; vault: Vault; sources: Map<string, SourceRecord> }, scenes: { original?: SceneOriginal }[], voice: { id: string; speed?: unknown; pitch?: unknown; style?: unknown } | null) => {
+  const audioUrl = (hash: string) => `http://127.0.0.1:${PORT}/api/audio/${hash}.wav?s=${s.token}`;
+  if (scenes.some((x) => x.original)) return { original: originalCutter(s), audioUrl };
+  return voice ? { tts, voiceId: voice.id, speed: Number(voice.speed) || 1, pitch: Number(voice.pitch) || 0, style: typeof voice.style === 'string' ? voice.style : '', audioUrl } : undefined;
+};
 const pendingMessage = (n: number) => `Hay ${n} escena(s) sin verificar. Verifica sus fuentes o márcalas como opinión en el paso de producción.`;
 /** Removes from disk the files only a deleted project used (illustrations, B-roll, music, renders, delivered packages). */
 const removeFiles = async (o: FileRefs): Promise<void> => {
@@ -810,11 +838,25 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { art: await saveDrawn(DATA_DIR, svg, desc) });
     }
 
+    // --- fragments of the person's own audio: listen to a cut before using it ---
+    if (url.pathname === '/api/fragments/preview' && req.method === 'POST') {
+      const b = await readBody(req);
+      const original: SceneOriginal = { sourceId: String(b.sourceId ?? ''), startSec: Number(b.startSec), endSec: Number(b.endSec), trimSilence: b.trimSilence === true, fadeMs: Number.isFinite(Number(b.fadeMs)) ? Number(b.fadeMs) : undefined };
+      try {
+        const c = await originalCutter(s)(original);
+        return json(res, 200, { url: `/api/audio/${c.hash}.wav`, durationSec: c.durationSec });
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo preparar el fragmento' });
+      }
+    }
+
     // --- deliverables: the person ticks what to produce ---
     if (url.pathname === '/api/deliverables' && req.method === 'POST') {
       const b = await readBody(req);
-      const base = VideoSpec.safeParse({ preset: 'youtube_long', scenes: (b.scenes ?? []).map((x: { text: string; durationSec: number }) => ({ text: x.text, durationSec: x.durationSec })), theme: b.theme, style: b.style });
+      const base = VideoSpec.safeParse({ preset: 'youtube_long', scenes: (b.scenes ?? []).map((x: { text: string; durationSec: number; original?: SceneOriginal }) => ({ text: x.text, durationSec: x.durationSec, original: x.original })), theme: b.theme, style: b.style });
       if (!base.success || !Array.isArray(b.items)) return json(res, 400, { error: 'Solicitud de entregables inválida' });
+      const oerr = originalsError(base.data.scenes, s);
+      if (oerr) return json(res, 409, { error: oerr });
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       const baseScenes = base.data.scenes.map(({ text, durationSec }) => ({ text, durationSec }));
       const g = gate(baseScenes, projectChecks(s));
@@ -832,7 +874,7 @@ const server = createServer(async (req, res) => {
       }
       const request: PackageRequest = {
         card, slides,
-        items: b.items, scenes: withBroll(withArt(baseScenes, s), s), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s), music: musicFor(s),
+        items: b.items, scenes: withOriginal(withBroll(withArt(baseScenes, s), s), base.data.scenes), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s), music: musicFor(s),
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
         summary: String(b.summary ?? '').slice(0, 3000),
@@ -850,10 +892,7 @@ const server = createServer(async (req, res) => {
       if (credits.music.length) request.extra = [...(request.extra ?? []), 'Música:', ...credits.music.map((c) => `- ${c}`)];
       if (credits.video.length) request.extra = [...(request.extra ?? []), 'Video:', ...credits.video.map((c) => `- ${c}`)];
       try {
-        return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: voice ? {
-          tts, voiceId: voice.id, speed: Number(voice.speed) || 1, pitch: Number(voice.pitch) || 0, style: typeof voice.style === 'string' ? voice.style : '',
-          audioUrl: (hash) => `http://127.0.0.1:${PORT}/api/audio/${hash}.wav?s=${s.token}`,
-        } : undefined, extras: { sfx: sfxFor(s) } }));
+        return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: narrationFor(s, base.data.scenes, voice), extras: { sfx: sfxFor(s) } }));
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudieron iniciar los entregables' });
       }
@@ -869,19 +908,18 @@ const server = createServer(async (req, res) => {
       const b = await readBody(req);
       const spec = VideoSpec.safeParse(b.spec);
       if (!spec.success || (b.quality !== 'draft' && b.quality !== 'final')) return json(res, 400, { error: 'Especificación de video inválida' });
+      const oerr = originalsError(spec.data.scenes, s);
+      if (oerr) return json(res, 409, { error: oerr });
       // The client never supplies audio URLs; the server adds them itself when narration is requested.
       const baseScenes = spec.data.scenes.map(({ text, durationSec }) => ({ text, durationSec }));
       const g = gate(baseScenes, projectChecks(s));
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
       const credits = creditsWithArt(baseScenes, s);
-      const artScenes = withBroll(withArt(baseScenes, s), s);
+      const artScenes = withOriginal(withBroll(withArt(baseScenes, s), s), spec.data.scenes);
       const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), music: musicFor(s), scenes: credits.sources.length || credits.images.length || credits.music.length || credits.video.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
-        return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, voice ? {
-          tts, voiceId: voice.id, speed: Number(voice.speed) || 1, pitch: Number(voice.pitch) || 0, style: typeof voice.style === 'string' ? voice.style : '',
-          audioUrl: (hash) => `http://127.0.0.1:${PORT}/api/audio/${hash}.wav?s=${s.token}`,
-        } : undefined, { sfx: sfxFor(s) }));
+        return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, narrationFor(s, spec.data.scenes, voice), { sfx: sfxFor(s) }));
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo iniciar el render' });
       }
@@ -1029,16 +1067,17 @@ const server = createServer(async (req, res) => {
       const rec: SourceRecord = { id, name, kind, createdAt: Date.now(), status: 'processing', progress: 1, label: 'En cola', durationSec: 0, timed: false, words: 0, segments: [] };
       s.sources.set(id, rec);
       const quality: Quality = url.searchParams.get('quality') === 'better' ? 'better' : 'fast';
-      void processSource(rec, file, DATA_DIR, quality, () => saveSources(s), (b) => s.vault.sealBytes(b));
+      void processSource(rec, file, DATA_DIR, quality, () => saveSources(s), (b) => s.vault.sealBytes(b), (id, f) => keepOriginal(DATA_DIR, id, f, (b) => s.vault.sealBytes(b)));
       return json(res, 200, { id });
     }
-    const m = url.pathname.match(/^\/api\/sources\/([a-f0-9]+)(?:\/(ideas|excerpt|lines|review|audio))?$/);
+    const m = url.pathname.match(/^\/api\/sources\/([a-f0-9]+)(?:\/(ideas|excerpt|lines|review|audio|text))?$/);
     if (m) {
       const rec = s.sources.get(m[1]!);
       if (!rec) return json(res, 404, { error: 'Source not found' });
       if (!m[2] && req.method === 'GET') return json(res, 200, { source: toView(rec) });
       if (!m[2] && req.method === 'DELETE') {
         await dropAudio(DATA_DIR, rec);
+        await dropOriginal(DATA_DIR, rec.id); // the kept original goes with the source
         dropCached(rec.id);
         s.sources.delete(rec.id);
         await saveSources(s);
@@ -1046,6 +1085,11 @@ const server = createServer(async (req, res) => {
       }
       if (m[2] === 'excerpt' && req.method === 'GET')
         return json(res, 200, { text: excerptFor(rec, Number(url.searchParams.get('start') ?? 0), Number(url.searchParams.get('end') ?? 0)) });
+      if (m[2] === 'text' && req.method === 'GET') {
+        const a = Number(url.searchParams.get('start') ?? 0);
+        const b = Number(url.searchParams.get('end') ?? 0);
+        return json(res, 200, { text: textForRange(rec.segments, a, b), durationSec: rec.durationSec, hasOriginal: hasOriginal(DATA_DIR, rec.id) });
+      }
       if (m[2] === 'lines' && req.method === 'GET')
         return json(res, 200, { lines: toReviewLines(rec.segments), hasAudio: !!rec.audio, selection: rec.selection ?? [], reviewed: !!rec.reviewed });
       if (m[2] === 'audio' && req.method === 'DELETE') {
