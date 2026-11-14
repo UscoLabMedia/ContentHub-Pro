@@ -17,6 +17,7 @@ interface PkgItem {
   status: 'pending' | 'working' | 'done' | 'error';
   progress: number;
   error?: string;
+  note?: string;
   files: PkgFile[];
 }
 interface PkgJob {
@@ -62,7 +63,7 @@ export function StepDeliverables({ project, set }: P) {
     const id = setInterval(() => {
       api<PkgJob>(`/api/deliverables/${job.id}`).then((j) => {
         setJob(j);
-        if (j.status !== 'working') setD({ result: { key, items: j.items.map(({ id: i, label, status, error, files }) => ({ id: i, label, status, error, files })) } });
+        if (j.status !== 'working') setD({ result: { key, items: j.items.map(({ id: i, label, status, error, note, files }) => ({ id: i, label, status, error, note, files })) } });
       }).catch(() => {});
     }, 1000);
     return () => clearInterval(id);
@@ -207,6 +208,10 @@ export function StepDeliverables({ project, set }: P) {
         })}
       </div>
 
+      <label className="flex items-start gap-2 text-xs text-slate-300">
+        <input type="checkbox" className="mt-0.5" checked={project.loudness.normalize} onChange={(e) => set({ ...project, loudness: { normalize: e.target.checked } })} />
+        <span>Ajustar el volumen de los videos finales a -15 LUFS (pico máximo -2 dB). Se mide y, si hace falta, se sube o baja el volumen entero; tus voces originales solo cambian de volumen. El borrador no se toca.</span>
+      </label>
       <div className="flex items-center gap-3">
         <button className={primary} disabled={(needsDraft && !draftOk) || running || d.selected.length === 0 || !!shortsErr || !!slidesErr} onClick={() => void generate()}>Generar lo marcado ({d.selected.filter((x) => x !== 'voice' || narrated).length})</button>
         {err && <p className="text-sm text-rose-400" role="alert">{err}</p>}
@@ -221,6 +226,7 @@ export function StepDeliverables({ project, set }: P) {
                 {it.status === 'working' && <span className="ml-auto text-xs text-slate-400">{(it as PkgItem).progress}%</span>}</div>
               {it.status === 'working' && <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${(it as PkgItem).progress}%` }} /></div>}
               {it.error && <p className="mt-1 text-xs text-rose-400" role="alert">{it.error}</p>}
+              {it.note && <p className="mt-1 text-xs text-slate-400">{it.note}</p>}
               <div className="mt-2 flex flex-wrap gap-2">
                 {it.files.map((f) => <a key={f.name} href={withToken(f.url)} download={f.name} className={`${secondary} inline-block`}>Descargar {f.name}</a>)}
               </div>

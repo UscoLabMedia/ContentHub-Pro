@@ -145,6 +145,8 @@ const originalCutter = (s: { vault: Vault; sources: Map<string, SourceRecord> })
   if (bad) throw new Error(bad);
   return cutClip({ dataDir: DATA_DIR, unseal: (b) => s.vault.openBytes(b), cacheFile: (h) => tts.cacheFile(h), original: o, segments: rec.segments, text });
 };
+/** Final videos are brought to -15 LUFS unless the person turned it off (on by default). */
+const loudnessOn = (s: { vault: Vault }): boolean => (currentData(s.vault) as { loudness?: { normalize?: boolean } } | undefined)?.loudness?.normalize !== false;
 /** The opening labels and the final screen the person set up (saved in the project). */
 const hookCtaFor = (s: { vault: Vault }) => {
   const d = currentData(s.vault) as { hook?: Parameters<typeof normalizeHook>[0]; cta?: Parameters<typeof normalizeCta>[0] } | undefined;
@@ -922,7 +924,7 @@ const server = createServer(async (req, res) => {
       if (credits.music.length) request.extra = [...(request.extra ?? []), 'Música:', ...credits.music.map((c) => `- ${c}`)];
       if (credits.video.length) request.extra = [...(request.extra ?? []), 'Video:', ...credits.video.map((c) => `- ${c}`)];
       try {
-        return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: narrationFor(s, base.data.scenes, voice), extras: { sfx: sfxFor(s) } }));
+        return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: narrationFor(s, base.data.scenes, voice), extras: { sfx: sfxFor(s), normalizeLoudness: loudnessOn(s) } }));
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudieron iniciar los entregables' });
       }
@@ -951,7 +953,7 @@ const server = createServer(async (req, res) => {
       const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), music: musicFor(s), hook: hc.hook, scenes: hc.cta ? [...withCredits, hc.cta] : withCredits }; // the final screen goes last, after the sources card
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
-        return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, narrationFor(s, spec.data.scenes, voice), { sfx: sfxFor(s) }));
+        return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, narrationFor(s, spec.data.scenes, voice), { sfx: sfxFor(s), normalizeLoudness: loudnessOn(s) }));
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo iniciar el render' });
       }

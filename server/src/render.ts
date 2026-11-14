@@ -5,8 +5,9 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { alignWords, beatTimes, keyWordsOf, normalizeTuning, stripMarkup, validateSlides, validateSpec, type CarouselSpec, type SceneOriginal, type Tts, type VideoSpec } from '@chp/core';
+import { alignWords, beatTimes, describeLoudness, keyWordsOf, normalizeTuning, stripMarkup, validateSlides, validateSpec, type CarouselSpec, type SceneOriginal, type Tts, type VideoSpec } from '@chp/core';
 import { buildSfxTrack, type SfxHook } from './sfx.ts';
+import { normalizeLoudness } from './loudness.ts';
 
 export interface RenderJob {
   id: string;
@@ -15,6 +16,8 @@ export interface RenderJob {
   quality: 'draft' | 'final';
   label?: string;
   error?: string;
+  /** What was done about the volume of a final video (shown next to the file). */
+  note?: string;
 }
 
 export interface Narration {
@@ -203,6 +206,8 @@ export function renderFrame(spec: VideoSpec, outFile: string, dataDir: string, r
 }
 
 export interface RenderExtras {
+  /** Bring the finished video to -15 LUFS (final quality only; drafts are never touched). */
+  normalizeLoudness?: boolean;
   /** Sound-effects plan; the track is built from the final timeline (after the narration stretched the scenes). */
   sfx?: SfxHook;
 }
@@ -265,7 +270,13 @@ async function run(job: RenderJob, input: VideoSpec, quality: 'draft' | 'final',
     clearTimeout(timer);
     void rm(specPath, { force: true }); // the spec holds a short-lived session token
     if (job.status === 'error') return;
-    if (code === 0 && existsSync(renderFile(dataDir, id))) Object.assign(job, { status: 'done', progress: 100 });
-    else Object.assign(job, { status: 'error', error: friendly(log) });
+    if (!(code === 0 && existsSync(renderFile(dataDir, id)))) return void Object.assign(job, { status: 'error', error: friendly(log) });
+    if (quality !== 'final' || !extras?.normalizeLoudness) return void Object.assign(job, { status: 'done', progress: 100 });
+    // The volume is adjusted after the render, in place; a failure here never loses the video.
+    Object.assign(job, { label: 'Ajustando el volumen', progress: 99 });
+    normalizeLoudness(renderFile(dataDir, id))
+      .then((r) => { job.note = r ? describeLoudness(r.before, r.after, r.changed) : 'Video sin audio: no hay volumen que ajustar'; })
+      .catch((e) => { job.note = `No pude ajustar el volumen (el video quedó como salió): ${e instanceof Error ? e.message.slice(0, 120) : String(e)}`; })
+      .finally(() => Object.assign(job, { status: 'done', progress: 100 }));
   });
 }
