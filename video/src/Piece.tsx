@@ -5,7 +5,7 @@ import { DEFAULT_STYLE, heroNumber, type StyleProfile } from '@chp/core/style';
 import './fonts.ts';
 import { musicGain, normalizeMix, speechWindows } from '@chp/core/music';
 import { captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
-import { Art, Background, Hero, Karaoke, Motif, Particles, camTransform, camera } from './visual.tsx';
+import { Art, Background, Broll, Hero, Karaoke, Motif, Particles, camTransform, camera } from './visual.tsx';
 
 const styleOf = (spec: VideoSpec): StyleProfile => {
   if (spec.style) return spec.style as StyleProfile;
@@ -41,12 +41,20 @@ const Scene = ({ scene, index, style }: { scene: VideoSpec['scenes'][number]; in
   return (
     <AbsoluteFill style={{ opacity: inP * (1 - outP), transform: `scale(${zoom})`, filter: `blur(${(1 - inP) * 6 + outP * 5}px)`, overflow: 'hidden', background: style.palette.bg }}>
       {scene.audioUrl && <Audio src={scene.audioUrl} />}
-      <div style={{ position: 'absolute', inset: 0, transform: camTransform(cam, 0.6) }}>
-        <Background style={style} frame={frame} index={index} width={width} height={height} />
-      </div>
-      <div style={{ position: 'absolute', inset: 0, transform: camTransform(cam, 1.5) }}>
-        <Motif style={style} frame={frame} index={index} width={width} height={height} />
-      </div>
+      {scene.broll ? (
+        <div style={{ position: 'absolute', inset: 0, transform: `${camTransform(cam, 0.6)} scale(1.12)` }}>
+          <Broll broll={scene.broll} style={style} durationInFrames={durationInFrames} fps={fps} />
+        </div>
+      ) : (
+        <>
+          <div style={{ position: 'absolute', inset: 0, transform: camTransform(cam, 0.6) }}>
+            <Background style={style} frame={frame} index={index} width={width} height={height} />
+          </div>
+          <div style={{ position: 'absolute', inset: 0, transform: camTransform(cam, 1.5) }}>
+            <Motif style={style} frame={frame} index={index} width={width} height={height} />
+          </div>
+        </>
+      )}
       {scene.art && <Art art={scene.art} style={style} frame={frame} fps={fps} width={width} height={height} hasHero={!!hero} />}
       {hero && <Hero hero={hero} style={style} frame={frame} fps={fps} width={width} height={height} />}
       <Particles style={style} frame={frame} index={index + 7} width={width} height={height} />

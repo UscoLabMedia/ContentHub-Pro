@@ -21,6 +21,8 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 | #13 | `feat/sfx` | Efectos de sonido sintetizados en local: biblioteca, sonido por evento y por animación de subtítulos, ambientes | abierto |
 
+| #14 | `feat/broll` | Video de stock (B-roll) como fondo de escena: Commons, Internet Archive, NASA, Pexels y Pixabay (claves gratuitas), créditos | abierto |
+
 ## Decisiones tomadas (no volver a preguntar)
 
 - Voz: local gratis + opción en línea después. Audio de revisión: cifrado y temporal.
@@ -34,6 +36,7 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 ## Pendiente
 
 - Voz en línea (JorgeNeural) con tiempos por palabra para mejor karaoke; revisar la librería con el usuario antes.
+- B-roll: Unsplash solo tiene fotos (no se usó; podría ser otra fuente de ilustraciones). Probado solo con fixtures locales: faltan pruebas reales con Pexels/Pixabay (claves), Commons, Internet Archive y NASA.
 - Ilustraciones: probar búsqueda real en Openverse/Commons (sin red en la sesión; solo probado con fixture local).
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
 - Menores: carruseles de Instagram, cortes de podcast, publicación automática.

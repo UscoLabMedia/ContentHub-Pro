@@ -76,6 +76,8 @@ export interface Credits {
   images?: string[];
   /** Credit lines for CC BY music (set by the caller; see musicCredits). */
   music?: string[];
+  /** Credit lines for CC BY / NASA stock video (see brollCredits). */
+  video?: string[];
 }
 
 /** Unique verified sources and own calculations of the scenes being delivered. */
@@ -115,6 +117,8 @@ export function creditCardText(c: Credits, max = 7): string {
   if (imgs.length) lines.push('Imágenes:', ...imgs);
   const mus = (c.music ?? []).slice(0, 2);
   if (mus.length) lines.push('Música:', ...mus);
+  const vid = (c.video ?? []).slice(0, 3);
+  if (vid.length) lines.push('Video:', ...vid);
   return `Fuentes\n${lines.join('\n')}`;
 }
 
