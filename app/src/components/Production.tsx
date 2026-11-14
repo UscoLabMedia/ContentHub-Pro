@@ -13,6 +13,7 @@ import { Subtitles } from './Subtitles.tsx';
 import { Music } from './Music.tsx';
 import { Sfx } from './Sfx.tsx';
 import { Beats } from './Beats.tsx';
+import { HookCta } from './HookCta.tsx';
 import { Verification } from './Verification.tsx';
 import { Head, PLATFORMS, Status, card, field, primary, type P } from './ui.tsx';
 
@@ -140,6 +141,7 @@ export function StepProduction({ project, set }: P) {
       </p>
       <StyleSelector project={project} set={set} />
       <Subtitles project={project} set={set} />
+      <HookCta project={project} set={set} />
       <Illustrations project={project} set={set} />
       <Broll project={project} set={set} />
       <Music project={project} set={set} />

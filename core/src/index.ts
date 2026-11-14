@@ -8,6 +8,7 @@ export * from './carousel.ts';
 export * from './projects.ts';
 export * from './fragments.ts';
 export * from './rhythm.ts';
+export * from './hookcta.ts';
 export * from './zip.ts';
 export * from './verification.ts';
 export * from './style.ts';

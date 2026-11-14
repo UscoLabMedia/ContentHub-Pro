@@ -5,7 +5,9 @@ import { DEFAULT_STYLE, heroNumber, type StyleProfile } from '@chp/core/style';
 import './fonts.ts';
 import { musicGain, normalizeMix, speechWindows } from '@chp/core/music';
 import { heroStartSec, segmentCount } from '@chp/core/rhythm';
+import { hookEndSec } from '@chp/core/hookcta';
 import { captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
+import { CtaCard, Hook } from './hookcta.tsx';
 import { Art, Background, Broll, Hero, Karaoke, Motif, Particles, camTransform, camera } from './visual.tsx';
 
 export const styleOf = (spec: { style?: unknown; theme?: VideoSpec['theme'] }): StyleProfile => {
@@ -99,6 +101,9 @@ export const Piece = (spec: VideoSpec) => {
   const mix = spec.music ? normalizeMix(spec.music) : null;
   const win = speechWindows(spec.scenes.map((s) => ({ durationSec: s.durationSec, speechSec: s.speechSec, card: s.card })));
   let from = 0;
+  // The opening labels last the first seconds (or all the content when kept) and never reach the cards at the end.
+  const contentSec = spec.scenes.filter((x) => !x.card).reduce((n, x) => n + x.durationSec, 0);
+  const hookEnd = spec.hook ? Math.round(hookEndSec(contentSec, spec.hook.always === true) * fps) : 0;
   return (
     <AbsoluteFill style={{ background: style.palette.bg }}>
       {spec.music && mix && <Audio src={spec.music.url} loop loopVolumeCurveBehavior="extend" volume={(f) => musicGain(f / fps, win, mix)} />}
@@ -107,12 +112,17 @@ export const Piece = (spec: VideoSpec) => {
         const dur = Math.max(1, Math.round(s.durationSec * fps));
         const el = (
           <Sequence key={i} from={from} durationInFrames={dur}>
-            {s.card ? <Card text={s.text} style={style} /> : <Scene scene={s} index={i} style={style} />}
+            {s.cta ? <CtaCard text={s.text} cta={s.cta} style={style} /> : s.card ? <Card text={s.text} style={style} /> : <Scene scene={s} index={i} style={style} />}
           </Sequence>
         );
         from += dur;
         return el;
       })}
+      {spec.hook && hookEnd > 0 && (
+        <Sequence from={0} durationInFrames={hookEnd}>
+          <Hook lines={spec.hook.lines} style={style} endFrame={hookEnd} />
+        </Sequence>
+      )}
     </AbsoluteFill>
   );
 };

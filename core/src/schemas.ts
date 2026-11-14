@@ -152,9 +152,11 @@ export const BeatWordsOut = z.object({
 /** Input of the Remotion template; built locally from a script (zero tokens). */
 export const VideoSpec = z.object({
   preset: z.string(),
-  scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional(), card: z.boolean().optional(), speechSec: z.number().optional(), wordTimes: z.array(z.object({ from: z.number(), to: z.number() })).optional(), art: z.object({ url: z.string(), kind: z.enum(['image', 'svg']) }).optional(), broll: z.object({ url: z.string(), durationSec: z.number() }).optional(), beatWords: z.array(z.string().max(30)).max(3).optional(), keywords: z.array(z.string().max(40)).max(40).optional(), beats: z.array(z.number()).max(12).optional(), original: z.object({ sourceId: z.string(), startSec: z.number(), endSec: z.number(), trimSilence: z.boolean().optional(), fadeMs: z.number().optional(), joinStart: z.boolean().optional(), joinEnd: z.boolean().optional() }).optional() })),
+  scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional(), card: z.boolean().optional(), speechSec: z.number().optional(), wordTimes: z.array(z.object({ from: z.number(), to: z.number() })).optional(), art: z.object({ url: z.string(), kind: z.enum(['image', 'svg']) }).optional(), broll: z.object({ url: z.string(), durationSec: z.number() }).optional(), beatWords: z.array(z.string().max(30)).max(3).optional(), keywords: z.array(z.string().max(40)).max(40).optional(), cta: z.object({ lines: z.array(z.string().max(60)).max(2), icon: z.boolean().optional() }).optional(), beats: z.array(z.number()).max(12).optional(), original: z.object({ sourceId: z.string(), startSec: z.number(), endSec: z.number(), trimSilence: z.boolean().optional(), fadeMs: z.number().optional(), joinStart: z.boolean().optional(), joinEnd: z.boolean().optional() }).optional() })),
   theme: z.object({ bg: z.string(), fg: z.string(), accent: z.string() }).optional(),
   style: StyleSchema.optional(),
+  /** Opening labels at the top (added by the server from the project's settings). */
+  hook: z.object({ lines: z.array(z.string().max(60)).max(2), always: z.boolean().optional() }).optional(),
   /** Background music with its mix (the URL is added by the server). */
   music: z.object({ url: z.string(), volume: z.number(), duck: z.boolean(), duckTo: z.number(), fadeInSec: z.number(), fadeOutSec: z.number() }).optional(),
   /** Sound-effects track (WAV) built by the server for this video. */

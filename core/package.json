@@ -13,6 +13,7 @@
     "./projects": "./src/projects.ts",
     "./fragments": "./src/fragments.ts",
     "./rhythm": "./src/rhythm.ts",
+    "./hookcta": "./src/hookcta.ts",
     "./verification": "./src/verification.ts",
     "./style": "./src/style.ts",
     "./motion": "./src/motion.ts",
