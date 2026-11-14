@@ -11,7 +11,8 @@ import {
 } from '@chp/core';
 import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
 import { checkSource } from './verify.ts';
-import { searchArt, searchFree } from '@chp/core';
+import { FONTS, searchArt, searchFree } from '@chp/core';
+import { existsSync } from 'node:fs';
 
 export type Status = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skip';
 export interface CheckResult {
@@ -147,6 +148,11 @@ export const CHECKS: Check[] = [
     throw new Error('El render tardó demasiado (más de 10 minutos)');
   } },
 
+  { id: 'fonts', label: 'Tipografías de subtítulos incluidas', group: 'Video', run: async (c) => {
+    const missing = FONTS.filter((f) => f.id !== 'system' && !existsSync(join(c.root, 'node_modules', '@fontsource', f.id))).map((f) => f.label);
+    if (missing.length) throw new Error(`Faltan: ${missing.join(', ')}. Vuelve a abrir con ContentHub.bat para reinstalar.`);
+    return `${FONTS.length - 1} fuentes libres listas`;
+  } },
   { id: 'thumbnail', label: 'Miniatura (imagen 1280×720)', group: 'Video', run: async (c) => {
     if (!c.full) throw new Skip('Solo en la prueba completa');
     const out = join(c.dataDir, 'selftest-thumb.png');

@@ -55,9 +55,30 @@ interface VerifyJob {
 const verifyJobs = new Map<string, VerifyJob>();
 /** Contact sheets of recent references, in memory only (for the optional "refine with AI" step). */
 const sheets = new Map<string, Buffer>();
+const capSheets = new Map<string, Buffer>();
 /** Verification checks the person has saved in the project (keyed by scene text). */
 const projectChecks = (s: { vault: Vault }): Record<string, SceneCheck> => s.vault.get<{ verification?: Record<string, SceneCheck> }>('project')?.verification ?? {};
 /** Illustrations the person chose, keyed by scene text (saved in the project). */
+/** Fonts the person uploaded (encrypted on disk; metadata in the vault). */
+interface FontRec { id: string; name: string; ext: 'ttf' | 'otf' | 'woff' | 'woff2' }
+const FONT_MIME: Record<FontRec['ext'], string> = { ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2' };
+const fontsOf = (s: { vault: Vault }): FontRec[] => s.vault.get<FontRec[]>('fonts') ?? [];
+const fontFile = (id: string) => join(DATA_DIR, 'fonts', `${id}.enc`);
+function sniffFont(b: Uint8Array): FontRec['ext'] | null {
+  const t = Buffer.from(b.subarray(0, 4)).toString('latin1');
+  if (t === 'wOF2') return 'woff2';
+  if (t === 'wOFF') return 'woff';
+  if (t === 'OTTO') return 'otf';
+  if (t === 'true' || (b[0] === 0 && b[1] === 1 && b[2] === 0 && b[3] === 0)) return 'ttf';
+  return null;
+}
+/** The uploaded font a style uses, as a URL the local render browser can load (client-sent URLs are never trusted). */
+const userFontsFor = (style: { captions?: { font: string } } | undefined, s: { vault: Vault; token: string }): { family: string; url: string }[] | undefined => {
+  const f = style?.captions?.font;
+  const m = f?.match(/^user:([a-f0-9]{16})$/);
+  const rec = m ? fontsOf(s).find((x) => x.id === m[1]) : undefined;
+  return rec && existsSync(fontFile(rec.id)) ? [{ family: `user-${rec.id}`, url: `http://127.0.0.1:${PORT}/api/font/${rec.id}?s=${s.token}` }] : undefined;
+};
 const projectArt = (s: { vault: Vault }): Record<string, ArtRef> => s.vault.get<{ art?: Record<string, ArtRef> }>('project')?.art ?? {};
 /** Adds each scene's illustration URL (served by this server, only to the local render). Client-sent art is never trusted. */
 const withArt = <T extends { text: string; durationSec: number }>(scenes: T[], s: { vault: Vault; token: string }): (T & { art?: { url: string; kind: 'image' | 'svg' } })[] => {
@@ -284,6 +305,15 @@ const server = createServer(async (req, res) => {
       }
       return sendBytes(req, res, buf, 'audio/mpeg');
     }
+    const fontm = url.pathname.match(/^\/api\/font\/([a-f0-9]{16})$/);
+    if (fontm && req.method === 'GET') {
+      if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
+      const rec = fontsOf(session!).find((x) => x.id === fontm[1]);
+      if (!rec || !existsSync(fontFile(rec.id))) return json(res, 404, { error: 'Not found' });
+      const body = Buffer.from(await session!.vault.openBytes(new Uint8Array(await readFile(fontFile(rec.id)))));
+      res.writeHead(200, { 'content-type': FONT_MIME[rec.ext], 'content-length': body.length, 'access-control-allow-origin': '*', 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' });
+      return void res.end(body);
+    }
     const artm = url.pathname.match(/^\/api\/art\/([a-f0-9]{16})\.(png|jpg|webp|svg)$/);
     if (artm && req.method === 'GET') {
       if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
@@ -396,7 +426,7 @@ const server = createServer(async (req, res) => {
       if (!spec.success) return json(res, 400, { error: 'Vista previa inválida' });
       const id = randomBytes(8).toString('hex');
       try {
-        await renderFrame({ ...spec.data, scenes: withArt(spec.data.scenes.slice(0, 1).map(({ text, durationSec }) => ({ text, durationSec })), s).map((x) => ({ ...x, speechSec: Math.min(x.durationSec - 0.5, 4) })) }, join(DATA_DIR, 'renders', `${id}.png`), DATA_DIR, ROOT);
+        await renderFrame({ ...spec.data, fonts: userFontsFor(spec.data.style, s), scenes: withArt(spec.data.scenes.slice(0, 1).map(({ text, durationSec }) => ({ text, durationSec })), s).map((x) => ({ ...x, speechSec: Math.min(x.durationSec - 0.5, 4) })) }, join(DATA_DIR, 'renders', `${id}.png`), DATA_DIR, ROOT);
         return json(res, 200, { url: `/api/preview/${id}.png` });
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo generar la vista previa' });
@@ -417,7 +447,11 @@ const server = createServer(async (req, res) => {
           if (sheets.size >= 3) sheets.delete(sheets.keys().next().value!);
           sheets.set(id, an.sheet);
         }
-        return json(res, 200, { id, palette: an.palette, fingerprint: an.fingerprint ?? null, hasSheet: !!an.sheet });
+        if (an.capSheet) {
+          if (capSheets.size >= 3) capSheets.delete(capSheets.keys().next().value!);
+          capSheets.set(id, an.capSheet);
+        }
+        return json(res, 200, { id, palette: an.palette, fingerprint: an.fingerprint ?? null, hasSheet: !!an.sheet, captions: an.captions ?? null, hasCapSheet: !!an.capSheet });
       } catch {
         return json(res, 422, { error: 'No pude leer ese archivo como imagen o video' });
       } finally {
@@ -438,6 +472,51 @@ const server = createServer(async (req, res) => {
       } finally {
         await removeFile(file, { force: true });
       }
+    }
+
+    if (url.pathname === '/api/style/reference/subtitles-ai' && req.method === 'POST') {
+      // One small AI query: crops of the caption band. Cached by the sheet's hash.
+      const id = String((await readBody(req)).id ?? '');
+      const sheet = capSheets.get(id);
+      if (!sheet) return json(res, 404, { error: 'Esa referencia ya no está disponible; vuelve a subirla' });
+      if (!s.gateway) return json(res, 409, { error: 'Elige un motor de IA en Ajustes' });
+      const file = join(claudeWorkDir(), `subs-${id}.png`);
+      await writeFile(file, sheet);
+      try {
+        return json(res, 200, await s.gateway.run('subtitleFromSheet', `HOJA ${createHash('sha1').update(sheet).digest('hex')}`, { images: [file] }));
+      } finally {
+        await removeFile(file, { force: true });
+      }
+    }
+
+    // --- the person's own subtitle fonts (stored encrypted, never versioned) ---
+    if (url.pathname === '/api/fonts' && req.method === 'GET') return json(res, 200, { fonts: fontsOf(s).map(({ id, name }) => ({ id, name })) });
+    if (url.pathname === '/api/fonts' && req.method === 'PUT') {
+      const name = basename(String(url.searchParams.get('name') ?? 'fuente')).replace(/\.(ttf|otf|woff2?)$/i, '').replace(/[^\p{L}\p{N} _.-]/gu, '').slice(0, 40) || 'Mi fuente';
+      if (Number(req.headers['content-length'] ?? 0) > 4 * 1024 * 1024) return json(res, 413, { error: 'La fuente es demasiado grande (máx. 4 MB)' });
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const c of req) {
+        size += (c as Buffer).length;
+        if (size > 4 * 1024 * 1024) return json(res, 413, { error: 'La fuente es demasiado grande (máx. 4 MB)' });
+        chunks.push(c as Buffer);
+      }
+      const bytes = Buffer.concat(chunks);
+      const ext = sniffFont(bytes);
+      if (!ext) return json(res, 400, { error: 'Sube un archivo de fuente (.ttf, .otf, .woff o .woff2)' });
+      const id = createHash('sha1').update(bytes).digest('hex').slice(0, 16);
+      await mkdir(join(DATA_DIR, 'fonts'), { recursive: true });
+      await writeFile(fontFile(id), await s.vault.sealBytes(new Uint8Array(bytes)));
+      s.vault.set('fonts', [...fontsOf(s).filter((x) => x.id !== id), { id, name, ext }]);
+      await s.vault.save();
+      return json(res, 200, { id, name });
+    }
+    const fdel = url.pathname.match(/^\/api\/fonts\/([a-f0-9]{16})$/);
+    if (fdel && req.method === 'DELETE') {
+      s.vault.set('fonts', fontsOf(s).filter((x) => x.id !== fdel[1]));
+      await s.vault.save();
+      await removeFile(fontFile(fdel[1]!), { force: true });
+      return json(res, 200, { ok: true });
     }
 
     // --- scene illustrations: free web search first, a drawn SVG only when nothing fits ---
@@ -497,7 +576,7 @@ const server = createServer(async (req, res) => {
       const credits = creditsWithArt(baseScenes, s);
       const request: PackageRequest = {
         card: credits.sources.length || credits.images.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
-        items: b.items, scenes: withArt(baseScenes, s), theme: base.data.theme, style: base.data.style,
+        items: b.items, scenes: withArt(baseScenes, s), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s),
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
         summary: String(b.summary ?? '').slice(0, 3000),
@@ -534,7 +613,7 @@ const server = createServer(async (req, res) => {
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
       const credits = creditsWithArt(baseScenes, s);
       const artScenes = withArt(baseScenes, s);
-      const clean = { ...spec.data, scenes: credits.sources.length || credits.images.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
+      const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), scenes: credits.sources.length || credits.images.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
         return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, voice ? {
