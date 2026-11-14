@@ -32,6 +32,8 @@ export function Verification({ project, set }: P) {
   const scenes = project.production.scenes;
   const g = gate(scenes, project.verification);
   const [job, setJob] = useState<Job | null>(null);
+  const [mode, setMode] = useState<'free' | 'ai' | 'all'>('free');
+  const [note, setNote] = useState('');
   const [err, setErr] = useState('');
   const [open, setOpen] = useState<number | null>(null);
   const [form, setForm] = useState({ claim: '', title: '', url: '', quote: '' });
@@ -49,7 +51,7 @@ export function Verification({ project, set }: P) {
     const id = setInterval(() => {
       api<Job>(`/api/verify/${job.id}`).then((j) => {
         setJob(j);
-        if (j.status === 'done' && j.checks) setChecks(Object.fromEntries(j.checks.map((c) => [c.textKey, c])));
+        if (j.status === 'done' && j.checks) merge(j.checks);
         if (j.status === 'error') setErr(j.error ?? 'No se pudieron buscar las fuentes');
       }).catch(() => {});
     }, 1500);
@@ -57,8 +59,36 @@ export function Verification({ project, set }: P) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job]);
 
+  /** Free/AI results fill in scenes that are still pending; "rehacer todas" replaces everything it returns. */
+  const merge = (checks: SceneCheck[]) => {
+    const next = { ...project.verification };
+    const before = gate(scenes, next).pending.length;
+    for (const c of checks) {
+      const cur = next[c.textKey];
+      if (mode === 'all' || !cur) next[c.textKey] = c;
+      else if (sceneStatus(cur) === 'pending') next[c.textKey] = { ...cur, claims: [...cur.claims, ...c.claims.filter((n) => !cur.claims.some((o) => o.text === n.text))] };
+    }
+    const after = gate(scenes, next).pending.length;
+    setNote(mode === 'free' ? `Búsqueda gratuita lista: ${before - after} escena(s) verificadas; ${after} siguen pendientes. Para esas puedes usar la IA o añadir la fuente tú.` : `Búsqueda con IA lista: ${after} escena(s) pendientes.`);
+    set({ ...project, verification: next });
+  };
+
+  const free = async () => {
+    setErr('');
+    setNote('');
+    setMode('free');
+    const list = scenes.filter((s) => sceneStatus(project.verification[textKey(s.text)]) === 'pending');
+    try {
+      setJob(await api<Job>('/api/verify/free', { method: 'POST', json: { scenes: list.map((s) => ({ text: s.text })) } }));
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+
   const research = async (only: 'pending' | 'all') => {
     setErr('');
+    setNote('');
+    setMode(only === 'all' ? 'all' : 'ai');
     const list = scenes.filter((s) => only === 'all' || sceneStatus(project.verification[textKey(s.text)]) === 'pending');
     try {
       setJob(await api<Job>('/api/verify/research', { method: 'POST', json: { scenes: list.map((s) => ({ text: s.text })) } }));
@@ -124,8 +154,9 @@ export function Verification({ project, set }: P) {
       </div>
       <p className="text-xs text-slate-400">Cada escena con datos necesita fuentes que la app abre y comprueba. Mientras haya escenas pendientes no se puede pasar al borrador. Las fuentes verificadas van a la descripción y a una tarjeta «Fuentes» al final del video.</p>
       <div className="flex flex-wrap gap-2">
-        <button className={secondary} disabled={running || g.pending.length === 0} onClick={() => void research('pending')}>Buscar fuentes con IA (pendientes)</button>
-        <button className={secondary} disabled={running || scenes.length === 0} onClick={() => void research('all')}>Rehacer todas</button>
+        <button className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium hover:bg-indigo-500 disabled:opacity-40" disabled={running || g.pending.length === 0} onClick={() => void free()} title="Wikipedia, OpenAlex y datos abiertos. No gasta tu plan.">Buscar fuentes gratis</button>
+        <button className={secondary} disabled={running || g.pending.length === 0} onClick={() => void research('pending')} title="Usa consultas de tu plan de Claude Code">Buscar con IA (solo lo pendiente)</button>
+        <button className={secondary} disabled={running || scenes.length === 0} onClick={() => void research('all')}>Rehacer todas con IA</button>
         <button className={secondary} disabled={running} onClick={() => void recheck()}>Comprobar enlaces de nuevo</button>
         <button className={secondary} disabled={running || g.pending.length === 0} onClick={allOpinion}>Lo pendiente es opinión</button>
       </div>
@@ -135,6 +166,7 @@ export function Verification({ project, set }: P) {
           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full bg-indigo-500 transition-all" style={{ width: `${job.progress}%` }} /></div>
         </div>
       )}
+      {note && <p className="text-xs text-emerald-400" role="status">{note}</p>}
       {err && <p className="text-sm text-rose-400" role="alert">{err}</p>}
 
       <ul className="space-y-1">

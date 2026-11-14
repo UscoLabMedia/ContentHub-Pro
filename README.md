@@ -46,7 +46,8 @@ Si cambias escenas, estilo o voz, el video queda marcado como desactualizado y h
 
 En el paso de producción, cada escena con datos necesita **fuentes comprobadas**:
 
-1. **«Buscar fuentes con IA»:** Claude Code busca en la web fuentes para las afirmaciones de cada escena (necesita el motor «Mi cuenta de Claude Code»; consume consultas de tu plan).
+1. **«Buscar fuentes gratis»** (primero): separa cada escena en afirmaciones y consulta [Wikipedia en español](https://es.wikipedia.org/), [OpenAlex](https://openalex.org/) (artículos científicos) y [datos.gov.co](https://www.datos.gov.co/) (datos abiertos de Colombia), sin claves y **sin gastar tu plan**. Solo se queda con una fuente si su propio texto contiene la cifra o las palabras de la afirmación.
+   **«Buscar con IA (solo lo pendiente)»:** para lo que siga pendiente, Claude Code busca en toda la web (necesita el motor «Mi cuenta de Claude Code»; consume consultas de tu plan).
 2. **Comprobación local:** la app abre **cada enlace** y busca la cifra o la frase en la página (sin gastar IA). Si no aparece o la página no abre, la escena queda **pendiente**. Nada de lo que diga la IA se da por bueno sin esto.
 3. **Tú decides:** puedes añadir tus propias fuentes (con cita), confirmar una fuente que revisaste tú, o marcar una escena como «opinión / sin datos».
 4. **Puerta:** mientras haya escenas pendientes no se puede pasar al borrador ni generar entregables.

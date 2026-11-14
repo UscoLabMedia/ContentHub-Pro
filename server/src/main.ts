@@ -16,7 +16,7 @@ import {
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderFile, renderStatus, startRender } from './render.ts';
 import { runSelfTest, type CheckResult } from './selftest.ts';
-import { researchScenes } from './research.ts';
+import { freeResearchScenes, researchScenes } from './research.ts';
 import { checkMany } from './verify.ts';
 import { getPackage, isPackageId, packageDir, startPackage, type PackageRequest } from './deliverables.ts';
 
@@ -329,6 +329,19 @@ const server = createServer(async (req, res) => {
       const b = await readBody(req);
       const items = (Array.isArray(b.items) ? b.items : []).slice(0, 20).map((x: { url: string; claim: string; quote?: string }) => ({ url: String(x.url).slice(0, 500), claim: String(x.claim).slice(0, 600), quote: x.quote ? String(x.quote).slice(0, 600) : undefined }));
       return json(res, 200, { results: await checkMany(items) });
+    }
+    if (url.pathname === '/api/verify/free' && req.method === 'POST') {
+      // Free search: public APIs + local check, no AI and no plan usage.
+      const b = await readBody(req);
+      const scenes = Array.isArray(b.scenes) ? b.scenes.slice(0, 80).map((x: { text: string }) => ({ text: String(x.text).slice(0, 600) })).filter((x: { text: string }) => x.text.trim()) : [];
+      if (!scenes.length) return json(res, 400, { error: 'No hay escenas para buscar' });
+      if ([...verifyJobs.values()].some((j) => j.status === 'working')) return json(res, 409, { error: 'Ya se están buscando fuentes; espera a que termine' });
+      const job: VerifyJob = { id: randomBytes(8).toString('hex'), status: 'working', progress: 1, label: 'Empezando' };
+      verifyJobs.set(job.id, job);
+      freeResearchScenes(scenes, (p, l) => Object.assign(job, { progress: p, label: l }))
+        .then((checks) => Object.assign(job, { status: 'done', progress: 100, checks }))
+        .catch((e: unknown) => Object.assign(job, { status: 'error', error: e instanceof Error ? e.message : String(e) }));
+      return json(res, 200, job);
     }
     if (url.pathname === '/api/verify/research' && req.method === 'POST') {
       const b = await readBody(req);

@@ -11,6 +11,7 @@ import {
 } from '@chp/core';
 import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
 import { checkSource } from './verify.ts';
+import { searchFree } from '@chp/core';
 
 export type Status = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skip';
 export interface CheckResult {
@@ -105,6 +106,11 @@ export const CHECKS: Check[] = [
     if (r.check === 'unreachable') throw new Error(`No pude abrir una página pública (${r.error}). Sin esto, las fuentes quedan pendientes y deberás confirmarlas tú`);
     if (r.check === 'not-found') throw new Warn('Abrió la página pero no encontró el dato de prueba');
     return 'Abre páginas públicas y encuentra el dato (la IA además busca en la web con Claude Code)';
+  } },
+  { id: 'freesearch', label: 'Búsqueda gratuita de fuentes (Wikipedia, OpenAlex, datos abiertos)', group: 'Datos', run: async () => {
+    const hits = await searchFree('El sistema GPS cuenta con 24 satélites operativos en órbita');
+    if (!hits.length) throw new Warn('No encontró fuentes para una frase de prueba: puede que Wikipedia/OpenAlex estén bloqueados o sin respuesta');
+    return `Encontró ${hits.length} fuente(s), por ejemplo: ${hits[0]!.source.title}`;
   } },
   { id: 'ffmpeg', label: 'Audio/video: ffmpeg (incluido en Remotion)', group: 'Video', run: async (c) => {
     const dir = await mkdtemp(join(tmpdir(), 'chp-ff-'));
