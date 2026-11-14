@@ -17,17 +17,17 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 | #9 | `feat/illustrations` | Ilustraciones por escena: búsqueda libre (PD/CC0/CC BY) → SVG de Claude; créditos | fusionado |
 | #10 | `feat/subtitle-style` | Subtítulos: 10 fuentes libres + fuente propia cifrada, 8 animaciones que rotan por escena, copiar de un video de referencia (local + «Afinar con IA») | fusionado |
 
-| #12 | `feat/music` | Música de fondo: búsqueda libre (Openverse), archivos propios, ducking, fundidos, créditos | abierto |
+| #12 | `feat/music` | Música de fondo: búsqueda libre (Openverse), archivos propios, ducking, fundidos, créditos | fusionado |
 
-| #13 | `feat/sfx` | Efectos de sonido sintetizados en local: biblioteca, sonido por evento y por animación de subtítulos, ambientes | abierto |
+| #13 | `feat/sfx` | Efectos de sonido sintetizados en local: biblioteca, sonido por evento y por animación de subtítulos, ambientes | fusionado |
 
-| #14 | `feat/broll` | Video de stock (B-roll) como fondo de escena: Commons, Internet Archive, NASA, Pexels y Pixabay (claves gratuitas), créditos | abierto |
+| #14 | `feat/broll` | Video de stock (B-roll) como fondo de escena: Commons, Internet Archive, NASA, Pexels y Pixabay (claves gratuitas), créditos | fusionado |
 
-| #16 | `feat/online-voices` | Voces en línea (Edge y Azure), tono/estilo, pausas y énfasis, tiempos por palabra en el karaoke | abierto |
+| #16 | `feat/online-voices` | Voces en línea (Edge y Azure), tono/estilo, pausas y énfasis, tiempos por palabra en el karaoke | fusionado |
 
-| #17 | `feat/local-voices` | Voces locales gratis con Kokoro (Dora, Alex, Santa): instalación automática, motor persistente, descarga con reintentos | abierto |
+| #17 | `feat/local-voices` | Voces locales gratis con Kokoro (Dora, Alex, Santa): instalación automática, motor persistente, descarga con reintentos | fusionado |
 
-| #18 | `feat/voice-cloning` | Clonar una voz (OpenVoice v2 ONNX vía voiceclonnx), consentimiento obligatorio, muestra cifrada, aviso de voz sintética | abierto |
+| #18 | `feat/voice-cloning` | Clonar una voz (OpenVoice v2 ONNX vía voiceclonnx), consentimiento obligatorio, muestra cifrada, aviso de voz sintética | fusionado |
 
 ## Decisiones tomadas (no volver a preguntar)
 
@@ -41,18 +41,19 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 ## Pendiente
 
-- Voces en línea y clonación (SIGUIENTE; diseño decidido, en 3 etapas, cada una su rama y PR):
-  1. (HECHO en `feat/online-voices`, PR #16) voces en línea para elegir y escuchar muestras: Edge (gratis, no oficial, tiempos por palabra; riesgo de ToS) + Azure AI Speech (oficial, clave gratuita guardada cifrada; estilos y ajustes). Ajustes: tono y velocidad, estilo/emoción (según el motor), pausas y énfasis por palabra (marcas en el guion). Mejor karaoke con los tiempos por palabra.
-  2. (HECHO en `feat/local-voices`, PR #17; probado con instalación real en la sesión)  voz local gratis desde GitHub: Kokoro (Apache 2.0, español: Dora/Alex/Santa, corre en CPU); evaluar RosaritoRD/local-voice (MIT, Kokoro+Piper con API). Confirmar licencia de pesos en la ficha oficial.
-  3. (HECHO en `feat/voice-cloning`, PR #18; motor sin probar con modelos reales)  subir una muestra y clonarla en local, según el equipo: sin GPU OpenVoice v2 (MIT), con GPU Chatterbox (MIT; confirmar que siga mantenido). Reglas: solo tu voz o con permiso escrito, casilla de confirmación obligatoria y nota de consentimiento guardada en la bóveda; sin imitar a personas públicas. Descartar XTTS-v2 y F5-TTS (pesos no comerciales).
-  Nota: sin red, GPU ni Windows en la sesión, estas etapas solo se prueban con fixtures; se necesita probar en el PC del usuario.
+- Voces (etapas 1, 2 y 3: en línea, Kokoro local y clonación): HECHAS y fusionadas (PRs #15–#18). Pendiente solo probarlas en el PC del usuario.
 - Revisar la licencia de cada voz de Piper antes de monetizar (el motor actual es GPL-3.0 y cada modelo tiene su ficha).
 - B-roll: Unsplash solo tiene fotos (no se usó; podría ser otra fuente de ilustraciones). Probado solo con fixtures locales: faltan pruebas reales con Pexels/Pixabay (claves), Commons, Internet Archive y NASA.
 - Ilustraciones: probar búsqueda real en Openverse/Commons (sin red en la sesión; solo probado con fixture local).
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
 - Voces en línea: probado solo con proveedores simulados y un servidor de prueba de Azure; faltan pruebas reales con Edge y con una clave de Azure. Azure REST no da tiempos por palabra (se usa la estimación).
 - Clonación de voz: solo probada con un convertidor simulado y la instalación real (venv + voiceclonnx 0.0.3a3, alfa de un autor pequeño); los modelos viven en Hugging Face, inaccesible desde la sesión, así que la conversión real y su calidad están sin probar. voiceclonnx fuerza CPU (no usa GPU). Chatterbox descartado (retirado por su autor en ago 2026).
-- Menores: carruseles de Instagram, cortes de podcast, publicación automática.
+- CARRUSEL DE INSTAGRAM (SIGUIENTE; rama `feat/carousel` creada desde `main`, aún sin código; diseño decidido):
+  - Láminas desde las escenas del guion (local, sin IA): la primera es portada con el gancho, la última cierre con llamada a la acción; se pueden editar, reordenar y quitar. Si hay fuentes o créditos CC BY, se añade una lámina final de «Fuentes».
+  - Cada lámina lleva: el estilo del usuario (colores, fondo, tipografía de subtítulos), la ilustración o un cuadro del B-roll de esa escena si existe, y numeración 1/N con flecha para deslizar. NO lleva número gigante (no lo eligió).
+  - Entrega: solo Instagram 4:5 (1080×1350) en PNG numerados, descargables uno a uno o en un .zip (zip sin compresión escrito a mano con zlib.crc32). Opcional más adelante: 1:1, 9:16 y PDF (no elegidos).
+  - Plan técnico: composición Remotion `Carousel` con calculateMetadata (un fotograma por lámina) renderizada como secuencia de PNG en una sola pasada (`--sequence`), modo `carousel` en `video/render.mjs`; exportar el hook de fuentes de `Piece.tsx`; entregable `carousel` en `core/src/deliverables.ts` y `server/src/deliverables.ts`; módulo `core/src/carousel.ts` (slidesFromScenes, reparto de textos largos ≤160 caracteres, máx. 20 láminas); la verificación documental (gate) se aplica al texto de cada lámina (un texto editado sin verificar con cifras queda pendiente); en `Deliverables.tsx` no exigir borrador aprobado si solo se marcan entregables sin video (carrusel, miniatura, descripción); texto con créditos y pie sugerido en un .md; vista previa de una lámina.
+- Otros pendientes menores: cortes de clips del podcast (paso 1: archivos propios), publicación automática (cada plataforma exige credenciales propias).
 
 ## Límites conocidos / sin verificar
 
