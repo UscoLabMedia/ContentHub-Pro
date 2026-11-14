@@ -10,7 +10,7 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
@@ -18,6 +18,7 @@ import { isRenderId, renderFile, renderFrame, renderStatus, startRender } from '
 import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
 import { analyzeReference } from './reference.ts';
+import { ART_MIME, artExists, artPath, artUrl, downloadArt, saveDrawn } from './art.ts';
 import { checkMany } from './verify.ts';
 import { getPackage, isPackageId, packageDir, startPackage, type PackageRequest } from './deliverables.ts';
 
@@ -56,6 +57,17 @@ const verifyJobs = new Map<string, VerifyJob>();
 const sheets = new Map<string, Buffer>();
 /** Verification checks the person has saved in the project (keyed by scene text). */
 const projectChecks = (s: { vault: Vault }): Record<string, SceneCheck> => s.vault.get<{ verification?: Record<string, SceneCheck> }>('project')?.verification ?? {};
+/** Illustrations the person chose, keyed by scene text (saved in the project). */
+const projectArt = (s: { vault: Vault }): Record<string, ArtRef> => s.vault.get<{ art?: Record<string, ArtRef> }>('project')?.art ?? {};
+/** Adds each scene's illustration URL (served by this server, only to the local render). Client-sent art is never trusted. */
+const withArt = <T extends { text: string; durationSec: number }>(scenes: T[], s: { vault: Vault; token: string }): (T & { art?: { url: string; kind: 'image' | 'svg' } })[] => {
+  const art = projectArt(s);
+  return scenes.map((sc) => {
+    const a = art[textKey(sc.text)];
+    return a && artExists(DATA_DIR, a) ? { ...sc, art: { url: artUrl(PORT, s.token, a), kind: a.kind } } : sc;
+  });
+};
+const creditsWithArt = (scenes: { text: string }[], s: { vault: Vault }) => ({ ...creditsFrom(scenes, projectChecks(s)), images: artCredits(scenes, projectArt(s), textKey) });
 const pendingMessage = (n: number) => `Hay ${n} escena(s) sin verificar. Verifica sus fuentes o márcalas como opinión en el paso de producción.`;
 const selftest: { running: boolean; full: boolean; results: CheckResult[] } = { running: false, full: false, results: [] };
 
@@ -272,6 +284,15 @@ const server = createServer(async (req, res) => {
       }
       return sendBytes(req, res, buf, 'audio/mpeg');
     }
+    const artm = url.pathname.match(/^\/api\/art\/([a-f0-9]{16})\.(png|jpg|webp|svg)$/);
+    if (artm && req.method === 'GET') {
+      if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
+      const ref = { id: artm[1]!, ext: artm[2] as ArtRef['ext'] };
+      if (!artExists(DATA_DIR, ref)) return json(res, 404, { error: 'Not found' });
+      const body = await readFile(artPath(DATA_DIR, ref));
+      res.writeHead(200, { 'content-type': ART_MIME[ref.ext], 'content-length': body.length, 'content-security-policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'", 'x-content-type-options': 'nosniff', 'cache-control': 'private, max-age=3600' });
+      return void res.end(body);
+    }
     if (pv && req.method === 'GET') {
       if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
       const file = join(DATA_DIR, 'renders', `${pv[1]}.png`);
@@ -375,7 +396,7 @@ const server = createServer(async (req, res) => {
       if (!spec.success) return json(res, 400, { error: 'Vista previa inválida' });
       const id = randomBytes(8).toString('hex');
       try {
-        await renderFrame({ ...spec.data, scenes: spec.data.scenes.slice(0, 1).map(({ text, durationSec }) => ({ text, durationSec, speechSec: Math.min(durationSec - 0.5, 4) })) }, join(DATA_DIR, 'renders', `${id}.png`), DATA_DIR, ROOT);
+        await renderFrame({ ...spec.data, scenes: withArt(spec.data.scenes.slice(0, 1).map(({ text, durationSec }) => ({ text, durationSec })), s).map((x) => ({ ...x, speechSec: Math.min(x.durationSec - 0.5, 4) })) }, join(DATA_DIR, 'renders', `${id}.png`), DATA_DIR, ROOT);
         return json(res, 200, { url: `/api/preview/${id}.png` });
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo generar la vista previa' });
@@ -419,6 +440,51 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // --- scene illustrations: free web search first, a drawn SVG only when nothing fits ---
+    if (url.pathname === '/api/art/queries' && req.method === 'POST') {
+      const b = await readBody(req);
+      const scenes: { text: string }[] = Array.isArray(b.scenes) ? b.scenes.slice(0, 40).map((x: { text: unknown }) => ({ text: String(x.text ?? '').slice(0, 400) })) : [];
+      const local = scenes.map((x) => ({ key: textKey(x.text), query: artQuery(x.text), draw: '' }));
+      if (!s.gateway || !scenes.length) return json(res, 200, { items: local, ai: false });
+      try {
+        // One cheap query for the whole script (cached): English search terms per scene.
+        const st = b.style && typeof b.style === 'object' ? `ESTILO ${String(b.style.name ?? '').slice(0, 40)}|fondo ${String(b.style.background ?? '').slice(0, 12)}` : 'ESTILO libre';
+        const r = await s.gateway.run('artQueries', `${st}\n${scenes.map((x) => `${textKey(x.text)}|${x.text}`).join('\n')}`);
+        const got = new Map(r.data.scenes.map((x) => [x.key, x]));
+        return json(res, 200, { items: local.map((l) => ({ ...l, ...(got.get(l.key)?.query ? { query: got.get(l.key)!.query, draw: got.get(l.key)!.draw } : {}) })), ai: true });
+      } catch {
+        return json(res, 200, { items: local, ai: false });
+      }
+    }
+    if (url.pathname === '/api/art/search' && req.method === 'POST') {
+      const q = String((await readBody(req)).query ?? '').slice(0, 80);
+      // Test seam: CHP_ART_TEST_URL replaces the public providers with a local fixture (never set in normal use).
+      const test = process.env.CHP_ART_TEST_URL;
+      return json(res, 200, { candidates: test ? ((await (await fetch(`${test}?q=${encodeURIComponent(q)}`)).json()) as unknown[]) : await searchArt(q) });
+    }
+    if (url.pathname === '/api/art/use' && req.method === 'POST') {
+      const c = (await readBody(req)).candidate ?? {};
+      const license = licenseOf(c.license === 'by' ? 'cc by' : String(c.license ?? ''));
+      if (!license || typeof c.url !== 'string') return json(res, 400, { error: 'Esa imagen no tiene una licencia permitida' });
+      try {
+        return json(res, 200, { art: await downloadArt(DATA_DIR, { url: c.url, title: String(c.title ?? '').slice(0, 120), author: String(c.author ?? '').slice(0, 80), license, licenseLabel: String(c.licenseLabel ?? '').slice(0, 30), page: String(c.page ?? '').slice(0, 300) }) });
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No pude descargar la imagen' });
+      }
+    }
+    if (url.pathname === '/api/art/draw' && req.method === 'POST') {
+      const b = await readBody(req);
+      if (!s.gateway) return json(res, 409, { error: 'Elige un motor de IA en Ajustes' });
+      const p = b.palette ?? {};
+      const hex = (v: unknown) => (/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v) : '#888888');
+      const desc = String(b.desc ?? '').slice(0, 200);
+      if (!desc.trim()) return json(res, 400, { error: 'Falta qué dibujar' });
+      const r = await s.gateway.run('drawIllustration', `DIBUJA: ${desc}\nPALETA: ${hex(p.fg)} ${hex(p.accent)} ${hex(p.accent2)} ${hex(p.bg)}`);
+      const svg = sanitizeSvg(r.data.svg);
+      if (!svg) return json(res, 422, { error: 'El dibujo no fue válido; inténtalo de nuevo' });
+      return json(res, 200, { art: await saveDrawn(DATA_DIR, svg, desc) });
+    }
+
     // --- deliverables: the person ticks what to produce ---
     if (url.pathname === '/api/deliverables' && req.method === 'POST') {
       const b = await readBody(req);
@@ -428,10 +494,10 @@ const server = createServer(async (req, res) => {
       const baseScenes = base.data.scenes.map(({ text, durationSec }) => ({ text, durationSec }));
       const g = gate(baseScenes, projectChecks(s));
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
-      const credits = creditsFrom(baseScenes, projectChecks(s));
+      const credits = creditsWithArt(baseScenes, s);
       const request: PackageRequest = {
-        card: credits.sources.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
-        items: b.items, scenes: base.data.scenes.map(({ text, durationSec }) => ({ text, durationSec })), theme: base.data.theme, style: base.data.style,
+        card: credits.sources.length || credits.images.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
+        items: b.items, scenes: withArt(baseScenes, s), theme: base.data.theme, style: base.data.style,
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
         summary: String(b.summary ?? '').slice(0, 3000),
@@ -441,6 +507,7 @@ const server = createServer(async (req, res) => {
       };
       request.sources = [...request.sources, ...credits.sources.map((x) => ({ source: x.title, url: x.url }))];
       if (credits.calcs.length) request.extra = [...(request.extra ?? []), 'Cálculos propios:', ...credits.calcs.map((c) => `- ${c}`)];
+      if (credits.images.length) request.extra = [...(request.extra ?? []), 'Imágenes:', ...credits.images.map((c) => `- ${c}`)];
       try {
         return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: voice ? {
           tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
@@ -465,8 +532,9 @@ const server = createServer(async (req, res) => {
       const baseScenes = spec.data.scenes.map(({ text, durationSec }) => ({ text, durationSec }));
       const g = gate(baseScenes, projectChecks(s));
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
-      const credits = creditsFrom(baseScenes, projectChecks(s));
-      const clean = { ...spec.data, scenes: credits.sources.length ? [...baseScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : baseScenes };
+      const credits = creditsWithArt(baseScenes, s);
+      const artScenes = withArt(baseScenes, s);
+      const clean = { ...spec.data, scenes: credits.sources.length || credits.images.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
         return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, voice ? {

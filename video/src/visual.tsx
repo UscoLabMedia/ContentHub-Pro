@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { Easing, interpolate, random, spring } from 'remotion';
+import { Easing, Img, interpolate, random, spring } from 'remotion';
 import { captionGroups, formatCount, wordTimings, readingSeconds, type CameraKind, type HeroNumber, type StyleProfile } from '@chp/core/style';
 
 export interface Cam {
@@ -112,6 +112,21 @@ export const Hero = ({ hero, style, frame, fps, width, height }: { hero: HeroNum
     <div style={{ position: 'absolute', left: 0, right: 0, top: portrait ? '16%' : '12%', display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${0.6 + 0.4 * enter})`, opacity: Math.min(1, enter * 1.4), filter: `blur(${(1 - Math.min(1, enter)) * 8}px)` }}>
       <div style={{ fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 900, fontSize: size, lineHeight: 1, color: style.palette.accent, textShadow: `0 ${size * 0.04}px 0 ${style.palette.fg}22`, letterSpacing: -2 }}>{formatCount(count, hero)}</div>
       {hero.unit && <div style={{ fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 800, fontSize: size * 0.34, color: style.palette.fg, opacity: 0.9, marginTop: size * 0.04 }}>{hero.unit}</div>}
+    </div>
+  );
+};
+
+/** The scene's illustration: enters with a spring, floats slowly, and sits above the subtitles (below the giant number if any). */
+export const Art = ({ art, style, frame, fps, width, height, hasHero }: { art: { url: string; kind: 'image' | 'svg' }; style: StyleProfile; frame: number; fps: number; width: number; height: number; hasHero: boolean }) => {
+  const enter = spring({ frame: frame - 6, fps, config: { damping: 13, stiffness: 110 } });
+  const portrait = height > width;
+  const box = Math.min(width, height) * (hasHero ? 0.42 : portrait ? 0.62 : 0.66);
+  const top = hasHero ? (portrait ? 0.4 : 0.44) : style.subtitle.position === 'center' ? 0.12 : portrait ? 0.2 : 0.1;
+  const bob = Math.sin(frame / (fps * 0.9)) * box * 0.012;
+  const sticker = style.background === 'paper';
+  return (
+    <div style={{ position: 'absolute', left: '50%', top: `${top * 100}%`, width: box, height: box, marginLeft: -box / 2, transform: `translateY(${bob}px) scale(${0.55 + 0.45 * enter}) rotate(${(1 - enter) * -6 + (sticker ? -2 : 0)}deg)`, opacity: Math.min(1, enter * 1.5) }}>
+      <Img src={art.url} style={{ width: '100%', height: '100%', objectFit: 'contain', filter: sticker ? `drop-shadow(0 0 0 #fff) drop-shadow(${box * 0.012}px ${box * 0.016}px 0 ${style.palette.fg}55)` : `drop-shadow(0 ${box * 0.02}px ${box * 0.03}px rgba(0,0,0,0.25))`, borderRadius: art.kind === 'image' && !sticker ? box * 0.04 : 0 }} />
     </div>
   );
 };
