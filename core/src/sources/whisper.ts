@@ -52,6 +52,28 @@ async function ensureModel(base: string, quality: Quality, onPct: Progress): Pro
   return file;
 }
 
+/**
+ * whisper.cpp's full JSON carries a probability for every token. Average them per segment so doubtful
+ * passages can be flagged. Anything unexpected is ignored: confidence is a bonus, never a requirement.
+ */
+export function attachConfidence(segs: Segment[], jsonText: string): void {
+  try {
+    const items = (JSON.parse(jsonText) as { transcription?: { offsets?: { from: number }; tokens?: { text: string; p?: number }[] }[] }).transcription ?? [];
+    for (const [i, seg] of segs.entries()) {
+      const it = items.length === segs.length ? items[i] : items.find((x) => Math.abs((x.offsets?.from ?? -1e9) / 1000 - seg.start) < 0.5);
+      const ps = (it?.tokens ?? []).filter((t) => !t.text.startsWith('[_') && typeof t.p === 'number').map((t) => t.p!);
+      if (ps.length) seg.conf = ps.reduce((a, b) => a + b, 0) / ps.length;
+    }
+  } catch {
+    /* no confidence available */
+  }
+}
+
+/** Small mono MP3 copy used only so the person can listen to the passages they must confirm. */
+export async function makeReviewAudio(input: string, outMp3: string): Promise<void> {
+  await runFfmpeg(['-y', '-i', input, '-vn', '-ac', '1', '-ar', '22050', '-c:a', 'libmp3lame', '-b:a', '48k', outMp3]);
+}
+
 export interface TranscribeOptions {
   dataDir: string;
   inputPath: string;
@@ -76,7 +98,7 @@ export async function transcribe(o: TranscribeOptions): Promise<Segment[]> {
     const exe = await ensureExe(base, report);
     const model = await ensureModel(base, o.quality ?? 'fast', report);
     report(26, 'Transcribiendo');
-    await run(exe, ['-m', model, '-f', wav, '-l', o.language ?? 'es', '-osrt', '-of', out, '-pp'], {
+    await run(exe, ['-m', model, '-f', wav, '-l', o.language ?? 'es', '-osrt', '-ojf', '-of', out, '-pp'], {
       onOutput: (s) => {
         const m = [...s.matchAll(/progress\s*=\s*(\d+)%/g)].pop();
         if (m) report(26 + Math.round(Number(m[1]) * 0.72), `Transcribiendo (${m[1]}%)`);
@@ -86,11 +108,13 @@ export async function transcribe(o: TranscribeOptions): Promise<Segment[]> {
       throw e;
     });
     const segs = parseSubtitles(await readFile(`${out}.srt`, 'utf8'));
+    attachConfidence(segs, await readFile(`${out}.json`, 'utf8').catch(() => ''));
     if (!segs.length) throw new Error('La transcripción salió vacía (¿el archivo tiene voz?)');
     report(100, 'Listo');
     return segs;
   } finally {
     await rm(wav, { force: true });
     await rm(`${out}.srt`, { force: true });
+    await rm(`${out}.json`, { force: true });
   }
 }

@@ -3,6 +3,8 @@ export interface Segment {
   start: number; // seconds; 0 for untimed text
   end: number;
   text: string;
+  /** Recognizer confidence 0-1 when the engine reports it (whisper.cpp token probabilities). */
+  conf?: number;
 }
 
 const T = String.raw`(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})`;

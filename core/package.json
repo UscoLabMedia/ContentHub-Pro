@@ -6,7 +6,8 @@
     ".": "./src/index.ts",
     "./presets": "./src/presets.ts",
     "./schemas": "./src/schemas.ts",
-    "./production": "./src/production.ts"
+    "./production": "./src/production.ts",
+    "./review": "./src/sources/review.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

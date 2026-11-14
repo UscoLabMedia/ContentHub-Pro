@@ -10,4 +10,5 @@ export * from './ai/gateway.ts';
 export * from './ai/client.ts';
 export * from './ingest/index.ts';
 export * from './sources/segments.ts';
+export * from './sources/review.ts';
 export * from './sources/whisper.ts';
