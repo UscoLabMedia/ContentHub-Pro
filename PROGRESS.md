@@ -1,6 +1,6 @@
 # PROGRESS
 
-Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada fase nueva va en su propia rama y PR. Actualizar en cada PR.
+Estado del proyecto. Estado vigente: **`main`** (PRs #1–#20 fusionados). Cada fase nueva va en su propia rama y PR. Actualizar en cada PR.
 
 ## PRs fusionados
 
@@ -29,7 +29,7 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 | #18 | `feat/voice-cloning` | Clonar una voz (OpenVoice v2 ONNX vía voiceclonnx), consentimiento obligatorio, muestra cifrada, aviso de voz sintética | fusionado |
 
-| #20 | `feat/carousel` | Carrusel de Instagram 4:5 (1080×1350): láminas desde las escenas, editor, PNG numerados + .zip + pie sugerido | en revisión |
+| #20 | `feat/carousel` | Carrusel de Instagram 4:5 (1080×1350): láminas desde las escenas, editor, PNG numerados + .zip + pie sugerido | fusionado |
 
 ## Decisiones tomadas (no volver a preguntar)
 
@@ -50,7 +50,7 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
 - Voces en línea: probado solo con proveedores simulados y un servidor de prueba de Azure; faltan pruebas reales con Edge y con una clave de Azure. Azure REST no da tiempos por palabra (se usa la estimación).
 - Clonación de voz: solo probada con un convertidor simulado y la instalación real (venv + voiceclonnx 0.0.3a3, alfa de un autor pequeño); los modelos viven en Hugging Face, inaccesible desde la sesión, así que la conversión real y su calidad están sin probar. voiceclonnx fuerza CPU (no usa GPU). Chatterbox descartado (retirado por su autor en ago 2026).
-- CARRUSEL DE INSTAGRAM: HECHO en `feat/carousel` (pendiente de revisión/fusión). Láminas locales desde las escenas (portada = gancho, cierre = llamada a la acción, textos largos divididos a ≤160 caracteres, máx. 20; lámina final de «Fuentes» si hay créditos), editables/reordenables/quitables en el paso 9 con vista previa por lámina; estilo del usuario + ilustración o cuadro del B-roll de la escena; numeración 1/N y flecha; sin número gigante. Entrega: PNG numerados + .zip (sin compresión, `core/src/zip.ts`) + `-pie.md` con créditos. Código: `core/src/carousel.ts`, composición `video/src/Carousel.tsx` (un fotograma por lámina, `--sequence`), modo `carousel`/`cslide` en `video/render.mjs`, `server/src/render.ts` (`renderCarousel`), entregable `carousel`, check `carousel` en «Probar todo». La verificación documental se aplica por lámina (`carouselGate`: un texto editado o dividido con cifras sin verificar queda pendiente). El paso 9 ya no exige borrador aprobado si solo se marcan carrusel, miniatura o descripción.
+- CARRUSEL DE INSTAGRAM: HECHO y fusionado (PR #20, `feat/carousel`). Láminas locales desde las escenas (portada = gancho, cierre = llamada a la acción, textos largos divididos a ≤160 caracteres, máx. 20; lámina final de «Fuentes» si hay créditos), editables/reordenables/quitables en el paso 9 con vista previa por lámina; estilo del usuario + ilustración o cuadro del B-roll de la escena; numeración 1/N y flecha; sin número gigante. Entrega: PNG numerados + .zip (sin compresión, `core/src/zip.ts`) + `-pie.md` con créditos. Código: `core/src/carousel.ts`, composición `video/src/Carousel.tsx` (un fotograma por lámina, `--sequence`), modo `carousel`/`cslide` en `video/render.mjs`, `server/src/render.ts` (`renderCarousel`), entregable `carousel`, check `carousel` en «Probar todo». La verificación documental se aplica por lámina (`carouselGate`: un texto editado o dividido con cifras sin verificar queda pendiente). El paso 9 ya no exige borrador aprobado si solo se marcan carrusel, miniatura o descripción.
   - Sin probar: lámina con cuadro de B-roll real (solo ilustración con SVG de prueba), el check «Probar todo» completo en el PC del usuario y la interfaz del editor en navegador (typecheck y tests sí pasan).
   - Opcional más adelante (no elegido): 1:1, 9:16 y PDF.
 - Otros pendientes menores: cortes de clips del podcast (paso 1: archivos propios), publicación automática (cada plataforma exige credenciales propias).
