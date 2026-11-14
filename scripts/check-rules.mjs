@@ -18,7 +18,7 @@ function* walk(dir) {
 }
 
 for (const file of walk(root)) {
-  const rel = relative(root, file);
+  const rel = relative(root, file).replaceAll('\\', '/'); // Windows gives backslashes; every comparison below uses '/'
   if (!/\.(ts|tsx|mjs|js|json|md)$/.test(rel) || rel === 'package-lock.json') continue;
   const text = readFileSync(file, 'utf8');
 
