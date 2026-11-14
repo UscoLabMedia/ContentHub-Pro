@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { PLATFORM_PRESET, toSpec, type Scene } from '@chp/core/production';
+import { PLATFORM_PRESET, scriptToScenes, toSpec, type Scene } from '@chp/core/production';
 import type { DeliverableId, ShortRange } from '@chp/core/deliverables';
 import type { SlideDraft } from '@chp/core/carousel';
+import { FADE_MS_DEFAULT, fragmentsToScenes, type Fragment } from '@chp/core/fragments';
 import { textKey, type SceneCheck } from '@chp/core/verification';
 import type { ArtRef } from '@chp/core/illustrations';
 import type { BrollRef } from '@chp/core/broll';
@@ -21,7 +22,10 @@ export interface Project {
   source: { id: string; name: string; startSec: number; endSec: number; hook: string } | null;
   /** Where the chosen topic's data came from (name, link, metric). Empty for topics typed by hand. */
   topicEvidence: { source: string; url?: string; metric?: string }[];
-  voice: { mode: 'unset' | 'narrate' | 'silent'; voiceId: string; speed: number; /** Semitones -6..+6. */ pitch: number; /** Azure speaking style (empty = neutral). */ style: string };
+  /** 'original' = the person's own audio (their real voices, only cut); 'narrate' = a generated voice; 'silent' = no voice. */
+  voice: { mode: 'unset' | 'narrate' | 'silent' | 'original'; voiceId: string; speed: number; /** Semitones -6..+6. */ pitch: number; /** Azure speaking style (empty = neutral). */ style: string; /** Fade at each cut of original audio, in ms. */ fadeMs?: number };
+  /** Fragments of the person's own audio, in order. They are the script when the voice mode is 'original'. */
+  fragments: Fragment[];
   /** Documentary mode: source checks per scene wording (see core/verification). Pending scenes block rendering. */
   verification: Record<string, SceneCheck>;
   /** Illustration per scene wording (file kept by the server, see core/illustrations). */
@@ -62,6 +66,7 @@ export const EMPTY_PROJECT: Project = {
   source: null,
   topicEvidence: [],
   voice: { mode: 'unset', voiceId: '', speed: 1, pitch: 0, style: '' },
+  fragments: [],
   verification: {},
   art: {},
   broll: {},
@@ -86,7 +91,7 @@ export const flushProject = async (): Promise<void> => {
 };
 
 /** A saved project (possibly from an older version, or empty) completed with the current defaults. */
-export const hydrate = (saved: Partial<Project>): Project => ({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, broll: { ...saved.broll }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
+export const hydrate = (saved: Partial<Project>): Project => ({ ...EMPTY_PROJECT, ...saved, fragments: Array.isArray(saved.fragments) ? saved.fragments : [], voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, broll: { ...saved.broll }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
 
 /** State of one project saved (encrypted) in the vault, debounced. Changing `projectId` loads another project. */
 export function useProject(projectId: string) {
@@ -123,4 +128,13 @@ export function useProject(projectId: string) {
     return () => clearTimeout(id);
   }, [project, projectId]);
   return [project, setProject] as const;
+}
+
+/**
+ * Scenes for a voice mode: one per fragment of the person's audio ('original'), otherwise made from the script text.
+ * Scenes keep the person's edits unless the mode changes between original audio and the rest.
+ */
+export function scenesFor(p: Project, mode: Project['voice']['mode'], fragments = p.fragments): Project['production']['scenes'] {
+  if (mode === 'original') return fragmentsToScenes(fragments, p.voice.fadeMs ?? FADE_MS_DEFAULT);
+  return scriptToScenes(p.script.text);
 }

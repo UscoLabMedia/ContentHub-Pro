@@ -76,9 +76,9 @@ export function validatePackage(r: PackageRequest, hasVoice: boolean): string | 
 }
 
 /** Narration clips → one WAV aligned with the video (each clip padded to its scene's length). */
-async function voiceWav(clips: { file: string; durationSec: number }[], out: string): Promise<void> {
+async function voiceWav(clips: { file: string; durationSec: number }[], out: string, layout: 'mono' | 'stereo' = 'mono'): Promise<void> {
   const inputs = clips.flatMap((c) => ['-i', c.file]);
-  const chains = clips.map((c, i) => `[${i}:a]aresample=44100,aformat=sample_fmts=s16:channel_layouts=mono,apad=whole_dur=${c.durationSec.toFixed(3)}[a${i}]`);
+  const chains = clips.map((c, i) => `[${i}:a]aresample=44100,aformat=sample_fmts=s16:channel_layouts=${layout},apad=whole_dur=${c.durationSec.toFixed(3)}[a${i}]`);
   const concat = `${clips.map((_, i) => `[a${i}]`).join('')}concat=n=${clips.length}:v=0:a=1[out]`;
   await runFfmpeg(['-y', ...inputs, '-filter_complex', `${chains.join(';')};${concat}`, '-map', '[out]', out]);
 }
@@ -109,7 +109,7 @@ async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: strin
   const spoken = (scenes: VideoSpec['scenes']) => scenes.filter((x) => !x.card);
   // The final timeline (scene lengths stretched to fit the narration) drives subtitles, chapters and the voice file.
   let resolved: Awaited<ReturnType<typeof narrateScenes>> | null = null;
-  const timeline = async () => (resolved ??= o.narration ? await narrateScenes(longSpec, o.narration) : { spec: { ...longSpec, scenes: longSpec.scenes.map((x) => (x.card ? x : { ...x, text: stripMarkup(x.text) })) }, clips: [] });
+  const timeline = async () => (resolved ??= o.narration ? await narrateScenes(longSpec, o.narration) : { spec: { ...longSpec, scenes: longSpec.scenes.map((x) => (x.card || x.original ? x : { ...x, text: stripMarkup(x.text) })) }, clips: [] });
   const textFile = async (item: PackageItem, name: string, content: string, kind: PackageFile['kind']) => {
     await writeFile(join(dir, name), content, 'utf8');
     item.files.push({ name, url: `/api/deliverable/${job.id}/${name}?dl=1`, kind });
@@ -151,7 +151,7 @@ async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: strin
       if (item.id === 'voice') {
         const t = await timeline();
         const name = `${base}-voz.wav`;
-        await voiceWav(t.clips.filter((c) => c.file), join(dir, name)); // the silent sources card at the end is left out
+        await voiceWav(t.clips.filter((c) => c.file), join(dir, name), t.spec.scenes.some((x) => x.original) ? 'stereo' : 'mono'); // the person's own audio keeps both channels // the silent sources card at the end is left out
         item.files.push({ name, url: `/api/deliverable/${job.id}/${name}?dl=1`, kind: 'audio' });
       }
       item.status = 'done';

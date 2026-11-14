@@ -2,10 +2,13 @@
 import { PRESETS } from './presets.ts';
 import type { PlatformId, VideoSpec } from './schemas.ts';
 import { validPalette, type StyleProfile } from './style.ts';
+import { MAX_CLIP_SEC, validateOriginal, type SceneOriginal } from './fragments.ts';
 
 export interface Scene {
   text: string;
   durationSec: number;
+  /** Narrated by a cut of the person's own audio instead of a synthetic voice. */
+  original?: SceneOriginal;
 }
 
 export const PLATFORM_PRESET: Record<PlatformId, string> = {
@@ -63,7 +66,16 @@ export function validateSpec(spec: VideoSpec): string | null {
   const p = PRESETS[spec.preset];
   if (!p || p.kind === 'image') return 'Formato no compatible con video';
   if (!spec.scenes.length || spec.scenes.length > 60) return 'Debe haber entre 1 y 60 escenas';
-  if (spec.scenes.some((s) => !s.text.trim() || s.text.length > (s.card ? 600 : 300) || !(s.durationSec >= 1 && s.durationSec <= 30))) return 'Escena inválida (texto vacío/largo o duración fuera de 1–30 s)';
+  // A scene made from the person's own audio lasts as long as its fragment (the format's total limit still applies below).
+  const maxText = (s: VideoSpec['scenes'][number]) => (s.card ? 600 : s.original ? 12_000 : 300);
+  const maxSec = (s: VideoSpec['scenes'][number]) => (s.original ? MAX_CLIP_SEC : 30);
+  if (spec.scenes.some((s) => !s.text.trim() || s.text.length > maxText(s) || !(s.durationSec >= 1 && s.durationSec <= maxSec(s)))) return 'Escena inválida (texto vacío/largo o duración fuera del rango permitido)';
+  const spoken = spec.scenes.filter((s) => !s.card);
+  if (spoken.some((s) => s.original) && spoken.some((s) => !s.original)) return 'Si usas tus audios originales, todas las escenas deben venir de ellos (no se mezclan con voz sintetizada)';
+  for (const s of spoken) {
+    const bad = s.original ? validateOriginal(s.original) : null;
+    if (bad) return bad;
+  }
   if (p.maxSeconds && totalDuration(spec.scenes) > p.maxSeconds + 5) return `Dura más de lo permitido para este formato (${p.maxSeconds} s)`;
   // Narration audio is only ever added by the local server, pointing at its own audio endpoint.
   const audio = /^http:\/\/127\.0\.0\.1:\d{2,5}\/api\/audio\/[a-f0-9]{40}\.wav\?s=[a-f0-9]{64}$/;

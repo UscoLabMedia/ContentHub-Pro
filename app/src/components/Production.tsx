@@ -5,7 +5,7 @@ import { scriptToScenes, toSpec, totalDuration } from '@chp/core/production';
 import type { MetricsAnalysisOut, PublishCopyOut } from '@chp/core/schemas';
 import { api, getToken } from '../api.ts';
 import { useTask } from '../ai.ts';
-import { flushProject, presetOf, specKey, voiceOf, type Project } from '../project.ts';
+import { flushProject, presetOf, scenesFor, specKey, voiceOf, type Project } from '../project.ts';
 import { StyleSelector } from './StyleSelector.tsx';
 import { Illustrations } from './Illustrations.tsx';
 import { Broll } from './Broll.tsx';
@@ -81,7 +81,8 @@ export function StepProduction({ project, set }: P) {
   const preset = PRESETS[presetOf(project)];
   const total = totalDuration(prod.scenes);
   const setProd = (patch: Partial<Project['production']>) => set({ ...project, production: { ...prod, ...patch } });
-  const fromScript = () => setProd({ scenes: scriptToScenes(project.script.text), preset: presetOf(project) });
+  const original = project.voice.mode === 'original';
+  const fromScript = () => setProd({ scenes: original ? scenesFor(project, 'original') : scriptToScenes(project.script.text), preset: presetOf(project) });
 
   useEffect(() => {
     if (!prod.scenes.length && project.script.text.trim()) fromScript();
@@ -107,7 +108,7 @@ export function StepProduction({ project, set }: P) {
             ))}
           </select>
         </label>
-        <button className={secondary} onClick={fromScript}>Rehacer desde el guion</button>
+        <button className={secondary} onClick={fromScript}>{original ? 'Rehacer desde mis fragmentos' : 'Rehacer desde el guion'}</button>
       </div>
       <p className="text-xs text-slate-400">Máximo 1080p (pensado para celular). Los carruseles de imágenes llegan en una próxima etapa.</p>
 
@@ -116,7 +117,7 @@ export function StepProduction({ project, set }: P) {
           <div key={i} className="flex items-start gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-2">
             <span className="mt-2 w-5 text-center text-xs text-slate-500">{i + 1}</span>
             <textarea rows={2} value={sc.text} aria-label={`Texto escena ${i + 1}`} onChange={(e) => setProd({ scenes: prod.scenes.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)) })} className={`${field} flex-1`} />
-            <input type="number" min={1} max={30} value={sc.durationSec} aria-label={`Duración escena ${i + 1}`} onChange={(e) => setProd({ scenes: prod.scenes.map((x, k) => (k === i ? { ...x, durationSec: Number(e.target.value) } : x)) })} className={`${field} w-16`} />
+            <input type="number" min={1} max={sc.original ? 3600 : 30} disabled={!!sc.original} title={sc.original ? 'Dura lo que dura tu fragmento de audio' : undefined} value={sc.durationSec} aria-label={`Duración escena ${i + 1}`} onChange={(e) => setProd({ scenes: prod.scenes.map((x, k) => (k === i ? { ...x, durationSec: Number(e.target.value) } : x)) })} className={`${field} w-16`} />
             <div className="flex flex-col gap-1">
               <button className={secondary} aria-label="Subir" onClick={() => move(i, -1)}>↑</button>
               <button className={secondary} aria-label="Bajar" onClick={() => move(i, 1)}>↓</button>
@@ -125,7 +126,7 @@ export function StepProduction({ project, set }: P) {
           </div>
         ))}
         <button className={secondary} onClick={() => setProd({ scenes: [...prod.scenes, { text: '', durationSec: 3 }] })}>+ Añadir escena</button>
-        <p className="text-[11px] text-slate-500">Marcas para la voz (no salen en pantalla): <code className="rounded bg-slate-800 px-1">[pausa 1s]</code> para un silencio y <code className="rounded bg-slate-800 px-1">*palabra*</code> para darle énfasis.</p>
+        {!original && <p className="text-[11px] text-slate-500">Marcas para la voz (no salen en pantalla): <code className="rounded bg-slate-800 px-1">[pausa 1s]</code> para un silencio y <code className="rounded bg-slate-800 px-1">*palabra*</code> para darle énfasis.</p>}
       </div>
 
       <p className={`text-xs ${preset && preset.maxSeconds && total > preset.maxSeconds ? 'text-amber-400' : 'text-slate-400'}`}>

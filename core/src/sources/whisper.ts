@@ -53,6 +53,14 @@ export function runFfmpeg(args: string[]): Promise<void> {
   return run(process.execPath, [cli, 'ffmpeg', ...args]).then(() => undefined);
 }
 
+/** Same as runFfmpeg but returns what ffmpeg printed (its log goes to stderr): used to read `silencedetect` results. */
+export async function runFfmpegLog(args: string[]): Promise<string> {
+  const cli = join(dirname(createRequire(import.meta.url).resolve('@remotion/cli')), '..', 'remotion-cli.js');
+  let log = '';
+  await run(process.execPath, [cli, 'ffmpeg', ...args], { onOutput: (s) => (log += s) });
+  return log;
+}
+
 /** Any audio/video file -> 16 kHz mono WAV (what whisper.cpp needs). */
 export async function toWav16k(input: string, outWav: string): Promise<void> {
   await runFfmpeg(['-y', '-i', input, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', outWav]);

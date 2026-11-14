@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
-  SAMPLE_TEXT, Vault, claudeCodeStatus, toSlideSpecs, createProject, currentId, deleteProject, duplicateProject, exportEnvelope, importProject, listProjects, getProjectData, type KV, createClaudeCodeClient, fetchRadar, piperAssetUrl, pdfToText,
+  SAMPLE_TEXT, Vault, claudeCodeStatus, toSlideSpecs, sineWav, createProject, currentId, deleteProject, duplicateProject, exportEnvelope, importProject, listProjects, getProjectData, type KV, createClaudeCodeClient, fetchRadar, piperAssetUrl, pdfToText,
   run, runFfmpeg, toWav16k, transcribe, wavInfo, type BlobStorage, type Tts,
 } from '@chp/core';
 import { renderCarousel, renderFile, renderStatus, renderStill, startRender } from './render.ts';
@@ -14,6 +14,7 @@ import { checkSource } from './verify.ts';
 import { edgeProvider } from './voice-online.ts';
 import { KokoroEngine } from './kokoro.ts';
 import { cloneDir } from './voiceclone.ts';
+import { cutClip, dropOriginal, hasOriginal, keepOriginal } from './original.ts';
 import { searchBroll, FONTS, SFX_LIBRARY, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
 import { existsSync } from 'node:fs';
 
@@ -203,6 +204,26 @@ export const CHECKS: Check[] = [
     const size = (await stat(out)).size;
     await rm(out, { force: true });
     return `PNG generado (${Math.round(size / 1024)} KB)`;
+  } },
+  { id: 'originalaudio', label: 'Tus audios como voz (guardar cifrado, cortar, fundidos)', group: 'Voz', run: async (c) => {
+    let disk: string | null = null;
+    const st: BlobStorage = { read: async () => disk, write: async (t) => void (disk = t) };
+    const { vault } = await Vault.create('contrasena-de-prueba', st, 1000);
+    const id = 'f00dcafe12345678';
+    const input = join(c.dataDir, 'selftest-original.wav');
+    await writeFile(input, sineWav(440, 3, 44100));
+    try {
+      if (!(await keepOriginal(c.dataDir, id, input, (b) => vault.sealBytes(b)))) throw new Error('No pude guardar el audio original');
+      if (!hasOriginal(c.dataDir, id)) throw new Error('El audio original no quedó guardado');
+      const clip = await cutClip({ dataDir: c.dataDir, unseal: (b) => vault.openBytes(b), cacheFile: (h) => join(c.dataDir, 'selftest-clips', `${h}.wav`), original: { sourceId: id, startSec: 0.5, endSec: 2.5, fadeMs: 20 } });
+      const d = clip.durationSec;
+      await rm(join(c.dataDir, 'selftest-clips'), { recursive: true, force: true });
+      if (Math.abs(d - 2) > 0.1) throw new Error(`El fragmento debía durar 2 s y dura ${d.toFixed(2)} s`);
+      return `Cifrado y recorte correctos (fragmento de ${d.toFixed(2)} s)`;
+    } finally {
+      await dropOriginal(c.dataDir, id);
+      await rm(input, { force: true });
+    }
   } },
   { id: 'projects', label: 'Gestor de proyectos (crear, duplicar, exportar, eliminar)', group: 'Sistema', run: async () => {
     const m = new Map<string, unknown>();
