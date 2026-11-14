@@ -29,7 +29,7 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 | #18 | `feat/voice-cloning` | Clonar una voz (OpenVoice v2 ONNX vía voiceclonnx), consentimiento obligatorio, muestra cifrada, aviso de voz sintética | fusionado |
 
-| — | `feat/carousel` | Carrusel de Instagram 4:5 (1080×1350): láminas desde las escenas, editor, PNG numerados + .zip + pie sugerido | en revisión (PR sin abrir) |
+| #20 | `feat/carousel` | Carrusel de Instagram 4:5 (1080×1350): láminas desde las escenas, editor, PNG numerados + .zip + pie sugerido | en revisión |
 
 ## Decisiones tomadas (no volver a preguntar)
 
