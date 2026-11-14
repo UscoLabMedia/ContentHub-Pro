@@ -19,6 +19,8 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 | #12 | `feat/music` | Música de fondo: búsqueda libre (Openverse), archivos propios, ducking, fundidos, créditos | abierto |
 
+| #13 | `feat/sfx` | Efectos de sonido sintetizados en local: biblioteca, sonido por evento y por animación de subtítulos, ambientes | abierto |
+
 ## Decisiones tomadas (no volver a preguntar)
 
 - Voz: local gratis + opción en línea después. Audio de revisión: cifrado y temporal.
@@ -31,10 +33,9 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 ## Pendiente
 
-- Efectos de sonido (SIGUIENTE; la música ya está hecha en `feat/music`): whoosh en cambios de escena, pop/clic con número gigante y palabra resaltada, y ambientes sutiles según el tema. Idea: sintetizar localmente con ffmpeg (sin licencias ni descargas); verificar qué filtros trae el ffmpeg de Remotion (no tiene volumedetect). Preguntar detalles antes de construir.
+- Voz en línea (JorgeNeural) con tiempos por palabra para mejor karaoke; revisar la librería con el usuario antes.
 - Ilustraciones: probar búsqueda real en Openverse/Commons (sin red en la sesión; solo probado con fixture local).
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
-- Voz en línea (JorgeNeural) con tiempos por palabra para mejor karaoke; revisar la librería con el usuario.
 - Menores: carruseles de Instagram, cortes de podcast, publicación automática.
 
 ## Límites conocidos / sin verificar

@@ -82,6 +82,7 @@ export const Piece = (spec: VideoSpec) => {
   return (
     <AbsoluteFill style={{ background: style.palette.bg }}>
       {spec.music && mix && <Audio src={spec.music.url} loop loopVolumeCurveBehavior="extend" volume={(f) => musicGain(f / fps, win, mix)} />}
+      {spec.sfx && <Audio src={spec.sfx.url} />}
       {spec.scenes.map((s, i) => {
         const dur = Math.max(1, Math.round(s.durationSec * fps));
         const el = (

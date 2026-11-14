@@ -149,3 +149,7 @@ En el paso 7, sección **Subtítulos**: elige tipografía (10 fuentes libres inc
 ## Música de fondo
 
 En el paso 7, sección **Música**: elige un ánimo (o «Sugerir con IA», una consulta mínima), busca 3 pistas libres de Openverse (CC0, dominio público o CC BY), escúchalas y elige una. También puedes subir tu propio archivo (por ejemplo, una pista de YouTube Audio Library: escribe su atribución si la pide). La música baja sola mientras habla la voz, se ajusta a la duración del video (se corta con fundido o se repite) y entra y sale con fundido. Las pistas CC BY y las atribuciones que escribas salen en la pantalla final y en la descripción.
+
+## Efectos de sonido
+
+En el paso 7, sección **Efectos de sonido** (apagados por defecto): se generan en tu PC, sin descargas ni licencias. Hay una **biblioteca** de 12 sonidos y 5 ambientes (toca ▶ para escucharlos). Tú eliges qué suena en cada momento: cambio de escena (con opción de alternar varios), número gigante, ilustración, y los subtítulos con **un sonido distinto por cada animación** (al entrar cada grupo de palabras o en cada palabra resaltada). El ambiente de fondo es muy suave y baja cuando habla la voz. «Escuchar los efectos de mi video» reproduce solo los efectos sobre la línea de tiempo de tu proyecto, sin renderizar.
