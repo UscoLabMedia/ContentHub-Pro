@@ -132,7 +132,7 @@ export const Broll = ({ broll, style, durationInFrames, fps }: { broll: { url: s
 };
 
 /** A torn edge: points around a rectangle, each pushed inward by an uneven amount (a slow wave plus fine noise). */
-const tornPolygon = (seed: string, steps = 96, amp = 3.4): string => {
+export const tornPolygon = (seed: string, steps = 96, amp = 3.4): string => {
   const n = Math.round(steps / 4);
   const pts: string[] = [];
   for (let side = 0; side < 4; side++) {
@@ -159,7 +159,7 @@ const TornCard = ({ children, seed, paper, size }: { children: ReactNode; seed: 
   </div>
 );
 
-const paperOf = (bg: string): string => {
+export const paperOf = (bg: string): string => {
   const n = parseInt(bg.slice(1), 16);
   return 0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255) > 150 ? '#fffaf0' : '#f4ead5';
 };

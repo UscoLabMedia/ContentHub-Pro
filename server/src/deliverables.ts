@@ -29,6 +29,9 @@ export interface PackageRequest {
   extra?: string[];
   /** Closing "Fuentes" card appended to every video. */
   card?: { text: string; durationSec: number };
+  /** Opening labels, and the final screen (a silent card with a button) that goes after every video's last card. */
+  hook?: VideoSpec['hook'];
+  cta?: VideoSpec['scenes'][number];
 }
 
 export interface PackageFile {
@@ -104,8 +107,8 @@ export async function startPackage(req: PackageRequest, o: { dataDir: string; ro
 async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: string; root: string; narration?: Narration; extras?: RenderExtras }, dir: string): Promise<void> {
   const base = slug(req.title);
   const theme = req.theme ?? THEME;
-  const withCard = (scenes: Scene[]): VideoSpec['scenes'] => (req.card ? [...scenes, { ...req.card, card: true }] : scenes);
-  const longSpec: VideoSpec = { preset: 'youtube_long', scenes: withCard(req.scenes), theme, style: req.style, fonts: req.fonts, music: req.music };
+  const withCard = (scenes: Scene[]): VideoSpec['scenes'] => [...(req.card ? [...scenes, { ...req.card, card: true }] : scenes), ...(req.cta ? [req.cta] : [])];
+  const longSpec: VideoSpec = { preset: 'youtube_long', scenes: withCard(req.scenes), theme, style: req.style, fonts: req.fonts, music: req.music, hook: req.hook };
   const spoken = (scenes: VideoSpec['scenes']) => scenes.filter((x) => !x.card);
   // The final timeline (scene lengths stretched to fit the narration) drives subtitles, chapters and the voice file.
   let resolved: Awaited<ReturnType<typeof narrateScenes>> | null = null;
@@ -126,7 +129,7 @@ async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: strin
       if (item.id === 'long') await video(item, longSpec, `${base}-largo-16x9.mp4`, [0, 100]);
       if (item.id === 'shorts') {
         for (const [i, r] of req.shorts.entries()) {
-          await video(item, { preset: 'youtube_short', scenes: withCard(req.scenes.slice(r.from, r.to + 1)), theme, style: req.style, fonts: req.fonts, music: req.music }, `${base}-short-${i + 1}.mp4`, [(i / req.shorts.length) * 100, ((i + 1) / req.shorts.length) * 100]);
+          await video(item, { preset: 'youtube_short', scenes: withCard(req.scenes.slice(r.from, r.to + 1)), theme, style: req.style, fonts: req.fonts, music: req.music, hook: req.hook }, `${base}-short-${i + 1}.mp4`, [(i / req.shorts.length) * 100, ((i + 1) / req.shorts.length) * 100]);
         }
       }
       if (item.id === 'carousel') {

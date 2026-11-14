@@ -11,7 +11,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
   Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
-  OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, segmentsIn, matchBeatWords, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
+  OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, segmentsIn, matchBeatWords, normalizeHook, normalizeCta, ctaScene, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderCarouselSlide, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
@@ -144,6 +144,12 @@ const originalCutter = (s: { vault: Vault; sources: Map<string, SourceRecord> })
   const bad = validateOriginal(o, rec.durationSec);
   if (bad) throw new Error(bad);
   return cutClip({ dataDir: DATA_DIR, unseal: (b) => s.vault.openBytes(b), cacheFile: (h) => tts.cacheFile(h), original: o, segments: rec.segments, text });
+};
+/** The opening labels and the final screen the person set up (saved in the project). */
+const hookCtaFor = (s: { vault: Vault }) => {
+  const d = currentData(s.vault) as { hook?: Parameters<typeof normalizeHook>[0]; cta?: Parameters<typeof normalizeCta>[0] } | undefined;
+  const cta = normalizeCta(d?.cta);
+  return { hook: normalizeHook(d?.hook) ?? undefined, cta: cta ? ctaScene(cta) : undefined };
 };
 /** The key words chosen for each scene (saved in the project by scene wording); only words that really are in the text are used. */
 const withBeats = <T extends { text: string }>(scenes: T[], s: { vault: Vault }): (T & { beatWords?: string[] })[] => {
@@ -897,7 +903,7 @@ const server = createServer(async (req, res) => {
         slides = slideMedia(drafts, s, card?.text);
       }
       const request: PackageRequest = {
-        card, slides,
+        card, slides, ...hookCtaFor(s),
         items: b.items, scenes: withBeats(withOriginal(withBroll(withArt(baseScenes, s), s), base.data.scenes), s), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s), music: musicFor(s),
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
@@ -940,7 +946,9 @@ const server = createServer(async (req, res) => {
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
       const credits = creditsWithArt(baseScenes, s);
       const artScenes = withBeats(withOriginal(withBroll(withArt(baseScenes, s), s), spec.data.scenes), s);
-      const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), music: musicFor(s), scenes: credits.sources.length || credits.images.length || credits.music.length || credits.video.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
+      const hc = hookCtaFor(s);
+      const withCredits = credits.sources.length || credits.images.length || credits.music.length || credits.video.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes;
+      const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), music: musicFor(s), hook: hc.hook, scenes: hc.cta ? [...withCredits, hc.cta] : withCredits }; // the final screen goes last, after the sources card
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
         return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, narrationFor(s, spec.data.scenes, voice), { sfx: sfxFor(s) }));
