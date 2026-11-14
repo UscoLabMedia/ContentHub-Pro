@@ -230,7 +230,7 @@ export const CHECKS: Check[] = [
     }
   } },
   { id: 'rhythm', label: 'Ritmo del video (número y beats con la palabra, cambios visuales)', group: 'Video', run: async () => {
-    const sc = { text: 'El satélite viaja a 20.200 km de altura', durationSec: 12, speechSec: 10 };
+    const sc = { text: 'El satélite viaja a 20.200 km de altura y orbita la Tierra', durationSec: 12, speechSec: 10 };
     const hero = heroStartSec(sc);
     const beats = beatTimes(sc, ['satélite']);
     if (hero === null || !(hero > 1 && hero < 4)) throw new Error(`El número debía aparecer cuando se dice (hacia 2 s) y sale en ${hero}`);
