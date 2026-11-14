@@ -9,7 +9,7 @@ Plataformas: TikTok, Instagram, Facebook, YouTube (largo y Shorts) y Spotify.
 
 **Día a día:** doble clic en el acceso directo (o en `ContentHub.bat`). Se actualiza solo desde la rama `main` de GitHub (siempre lo último) si no tienes cambios locales, instala lo que falte (incluido Claude Code), prepara la interfaz y abre el navegador.
 
-macOS: `ContentHub.command` · Linux: `./ContentHub.sh`. También funciona en Codespaces (`.devcontainer`).
+macOS: `ContentHub.command` · Linux: `./ContentHub.sh`. También funciona en Codespaces (`.devcontainer`), que además compila `whisper-cli` (whisper.cpp) al crearse para transcribir en local. En otros Linux/macOS, para transcribir tus archivos instala whisper.cpp y deja `whisper-cli` en el PATH; en Windows se instala solo. Si algo falla al crear el Codespace, `bash .devcontainer/install-whisper.sh` lo reintenta.
 
 **Para hacer ajustes con recarga en caliente:** `npm run dev:all` · pruebas y reglas: `npm run verify`.
 
