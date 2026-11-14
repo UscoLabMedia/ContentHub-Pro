@@ -136,6 +136,8 @@ export const StyleSheetOut = z.object({
 });
 export type StyleSheet = z.infer<typeof StyleSheetOut>;
 
+export const MusicMoodOut = z.object({ mood: z.enum(['documental', 'inspirador', 'alegre', 'energico', 'calmo', 'tenso', 'misterioso', 'triste']), hint: z.string().max(40) });
+
 export const ArtQueriesOut = z.object({
   scenes: z.array(z.object({ key: z.string(), query: z.string().max(60), draw: z.string().max(160) })).max(40),
 });
@@ -147,6 +149,8 @@ export const VideoSpec = z.object({
   scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional(), card: z.boolean().optional(), speechSec: z.number().optional(), art: z.object({ url: z.string(), kind: z.enum(['image', 'svg']) }).optional() })),
   theme: z.object({ bg: z.string(), fg: z.string(), accent: z.string() }).optional(),
   style: StyleSchema.optional(),
+  /** Background music with its mix (the URL is added by the server). */
+  music: z.object({ url: z.string(), volume: z.number(), duck: z.boolean(), duckTo: z.number(), fadeInSec: z.number(), fadeOutSec: z.number() }).optional(),
   /** Fonts the person uploaded: loaded by the render browser from this server. */
   fonts: z.array(z.object({ family: z.string(), url: z.string() })).optional(),
 });
@@ -166,6 +170,7 @@ export const OUTPUT_SCHEMAS = {
   verifyClaims: VerifyOut,
   styleFromSheet: StyleSheetOut,
   artQueries: ArtQueriesOut,
+  musicMood: MusicMoodOut,
   subtitleFromSheet: SubtitleSheetOut,
   drawIllustration: DrawOut,
 } as const;

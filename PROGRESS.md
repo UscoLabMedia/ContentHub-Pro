@@ -17,6 +17,8 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 | #9 | `feat/illustrations` | Ilustraciones por escena: búsqueda libre (PD/CC0/CC BY) → SVG de Claude; créditos | fusionado |
 | #10 | `feat/subtitle-style` | Subtítulos: 10 fuentes libres + fuente propia cifrada, 8 animaciones que rotan por escena, copiar de un video de referencia (local + «Afinar con IA») | fusionado |
 
+| #12 | `feat/music` | Música de fondo: búsqueda libre (Openverse), archivos propios, ducking, fundidos, créditos | abierto |
+
 ## Decisiones tomadas (no volver a preguntar)
 
 - Voz: local gratis + opción en línea después. Audio de revisión: cifrado y temporal.
@@ -29,7 +31,7 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 ## Pendiente
 
-- Música y efectos (SIGUIENTE; diseño decidido, rama nueva `feat/music-sfx`): música desde Openverse (incluye pistas de Free Music Archive; solo CC0/CC BY, con crédito en pantalla final y descripción) + YouTube Audio Library subida a mano (no tiene API; guardar atribución por pista y avisar que sus términos varían) + archivos propios. Elección por ánimo y tema con la consulta de IA del guion, la app propone 3 pistas para escuchar y el usuario elige. Mezcla: ducking bajo la voz, ajuste a la duración (corte con fade o repetición sin salto) y fundido de entrada/salida. Efectos: whoosh en cambios de escena, pop/clic con número gigante y palabra resaltada, y ambientes sutiles según el tema. Idea: sintetizar whoosh/pop/clic localmente con ffmpeg (sin licencias ni descargas); ambientes por búsqueda libre o sintetizados. Verificar qué filtros trae el ffmpeg de Remotion.
+- Efectos de sonido (SIGUIENTE; la música ya está hecha en `feat/music`): whoosh en cambios de escena, pop/clic con número gigante y palabra resaltada, y ambientes sutiles según el tema. Idea: sintetizar localmente con ffmpeg (sin licencias ni descargas); verificar qué filtros trae el ffmpeg de Remotion (no tiene volumedetect). Preguntar detalles antes de construir.
 - Ilustraciones: probar búsqueda real en Openverse/Commons (sin red en la sesión; solo probado con fixture local).
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
 - Voz en línea (JorgeNeural) con tiempos por palabra para mejor karaoke; revisar la librería con el usuario.

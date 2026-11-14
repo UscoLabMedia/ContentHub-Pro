@@ -3,6 +3,7 @@ import { AbsoluteFill, Audio, Sequence, continueRender, delayRender, interpolate
 import type { VideoSpec } from '@chp/core/schemas';
 import { DEFAULT_STYLE, heroNumber, type StyleProfile } from '@chp/core/style';
 import './fonts.ts';
+import { musicGain, normalizeMix, speechWindows } from '@chp/core/music';
 import { captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
 import { Art, Background, Hero, Karaoke, Motif, Particles, camTransform, camera } from './visual.tsx';
 
@@ -75,9 +76,12 @@ export const Piece = (spec: VideoSpec) => {
   const { fps } = useVideoConfig();
   const style = styleOf(spec);
   useSubtitleFonts(style, spec.fonts);
+  const mix = spec.music ? normalizeMix(spec.music) : null;
+  const win = speechWindows(spec.scenes.map((s) => ({ durationSec: s.durationSec, speechSec: s.speechSec, card: s.card })));
   let from = 0;
   return (
     <AbsoluteFill style={{ background: style.palette.bg }}>
+      {spec.music && mix && <Audio src={spec.music.url} loop loopVolumeCurveBehavior="extend" volume={(f) => musicGain(f / fps, win, mix)} />}
       {spec.scenes.map((s, i) => {
         const dur = Math.max(1, Math.round(s.durationSec * fps));
         const el = (

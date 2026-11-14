@@ -10,7 +10,7 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
@@ -18,6 +18,7 @@ import { isRenderId, renderFile, renderFrame, renderStatus, startRender } from '
 import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
 import { analyzeReference } from './reference.ts';
+import { downloadMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
 import { ART_MIME, artExists, artPath, artUrl, downloadArt, saveDrawn } from './art.ts';
 import { checkMany } from './verify.ts';
 import { getPackage, isPackageId, packageDir, startPackage, type PackageRequest } from './deliverables.ts';
@@ -88,7 +89,13 @@ const withArt = <T extends { text: string; durationSec: number }>(scenes: T[], s
     return a && artExists(DATA_DIR, a) ? { ...sc, art: { url: artUrl(PORT, s.token, a), kind: a.kind } } : sc;
   });
 };
-const creditsWithArt = (scenes: { text: string }[], s: { vault: Vault }) => ({ ...creditsFrom(scenes, projectChecks(s)), images: artCredits(scenes, projectArt(s), textKey) });
+/** Background music chosen in the project (a track + its mix). */
+const projectMusic = (s: { vault: Vault }): { track: MusicRef | null; mix?: Partial<MusicMix> } => s.vault.get<{ music?: { track: MusicRef | null; mix?: Partial<MusicMix> } }>('project')?.music ?? { track: null };
+const musicFor = (s: { vault: Vault; token: string }): { url: string } & MusicMix | undefined => {
+  const m = projectMusic(s);
+  return m.track && musicExists(DATA_DIR, m.track.id) ? { url: musicUrl(PORT, s.token, m.track.id), ...normalizeMix(m.mix) } : undefined;
+};
+const creditsWithArt = (scenes: { text: string }[], s: { vault: Vault }) => ({ ...creditsFrom(scenes, projectChecks(s)), images: artCredits(scenes, projectArt(s), textKey), music: musicFor(s as { vault: Vault; token: string }) ? musicCredits(projectMusic(s).track) : [] });
 const pendingMessage = (n: number) => `Hay ${n} escena(s) sin verificar. Verifica sus fuentes o márcalas como opinión en el paso de producción.`;
 const selftest: { running: boolean; full: boolean; results: CheckResult[] } = { running: false, full: false, results: [] };
 
@@ -305,6 +312,11 @@ const server = createServer(async (req, res) => {
       }
       return sendBytes(req, res, buf, 'audio/mpeg');
     }
+    const musm = url.pathname.match(/^\/api\/music\/([a-f0-9]{16})\.mp3$/);
+    if (musm && req.method === 'GET') {
+      if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
+      return musicExists(DATA_DIR, musm[1]!) ? sendFile(req, res, musicPath(DATA_DIR, musm[1]!), 'audio/mpeg') : json(res, 404, { error: 'Not found' });
+    }
     const fontm = url.pathname.match(/^\/api\/font\/([a-f0-9]{16})$/);
     if (fontm && req.method === 'GET') {
       if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
@@ -489,6 +501,53 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // --- background music: free search, own files, mood hint ---
+    if (url.pathname === '/api/music/mood' && req.method === 'POST') {
+      const b = await readBody(req);
+      const fallback = { mood: 'documental', hint: '', ai: false };
+      if (!s.gateway) return json(res, 200, fallback);
+      try {
+        const r = await s.gateway.run('musicMood', `TEMA: ${String(b.topic ?? '').slice(0, 160)}\nGUION: ${String(b.script ?? '').slice(0, 500)}\nESTILO: ${String(b.style ?? '').slice(0, 40)}`);
+        return json(res, 200, { mood: r.data.mood, hint: r.data.hint, ai: true });
+      } catch {
+        return json(res, 200, fallback);
+      }
+    }
+    if (url.pathname === '/api/music/search' && req.method === 'POST') {
+      const b = await readBody(req);
+      const mood = isMood(String(b.mood)) ? (b.mood as (typeof MOODS)[number]['id']) : 'documental';
+      const q = musicQuery(mood, String(b.hint ?? '').replace(/[^\p{L}\p{N} ]/gu, '').slice(0, 30));
+      // Test seam: CHP_MUSIC_TEST_URL replaces Openverse with a local fixture (never set in normal use).
+      const test = process.env.CHP_MUSIC_TEST_URL;
+      return json(res, 200, { query: q, candidates: test ? ((await (await fetch(`${test}?q=${encodeURIComponent(q)}`)).json()) as unknown[]) : await searchMusic(q) });
+    }
+    if (url.pathname === '/api/music/use' && req.method === 'POST') {
+      const c = (await readBody(req)).candidate ?? {};
+      const license = licenseOf(c.license === 'by' ? 'cc by' : String(c.license ?? ''));
+      if (!license || typeof c.url !== 'string') return json(res, 400, { error: 'Esa pista no tiene una licencia permitida' });
+      try {
+        return json(res, 200, { music: await downloadMusic(DATA_DIR, { url: c.url, title: String(c.title ?? ''), artist: String(c.artist ?? ''), durationSec: Number(c.durationSec) || 0, license, licenseLabel: String(c.licenseLabel ?? '').slice(0, 30) }) });
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No pude descargar la pista' });
+      }
+    }
+    if (url.pathname === '/api/music/own' && req.method === 'PUT') {
+      if (Number(req.headers['content-length'] ?? 0) > 60 * 1024 * 1024) return json(res, 413, { error: 'El archivo es demasiado grande (máx. 60 MB)' });
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const c of req) {
+        size += (c as Buffer).length;
+        if (size > 60 * 1024 * 1024) return json(res, 413, { error: 'El archivo es demasiado grande (máx. 60 MB)' });
+        chunks.push(c as Buffer);
+      }
+      const clean = (k: string, n: number) => String(url.searchParams.get(k) ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
+      try {
+        return json(res, 200, { music: await saveOwnMusic(DATA_DIR, Buffer.concat(chunks), { title: clean('title', 100) || basename(clean('name', 100)).replace(/\.[a-z0-9]+$/i, ''), artist: clean('artist', 80), credit: clean('credit', 160) }) });
+      } catch (e) {
+        return json(res, 422, { error: e instanceof Error ? e.message : 'No pude leer ese audio' });
+      }
+    }
+
     // --- the person's own subtitle fonts (stored encrypted, never versioned) ---
     if (url.pathname === '/api/fonts' && req.method === 'GET') return json(res, 200, { fonts: fontsOf(s).map(({ id, name }) => ({ id, name })) });
     if (url.pathname === '/api/fonts' && req.method === 'PUT') {
@@ -575,8 +634,8 @@ const server = createServer(async (req, res) => {
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
       const credits = creditsWithArt(baseScenes, s);
       const request: PackageRequest = {
-        card: credits.sources.length || credits.images.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
-        items: b.items, scenes: withArt(baseScenes, s), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s),
+        card: credits.sources.length || credits.images.length || credits.music.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
+        items: b.items, scenes: withArt(baseScenes, s), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s), music: musicFor(s),
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
         summary: String(b.summary ?? '').slice(0, 3000),
@@ -587,6 +646,7 @@ const server = createServer(async (req, res) => {
       request.sources = [...request.sources, ...credits.sources.map((x) => ({ source: x.title, url: x.url }))];
       if (credits.calcs.length) request.extra = [...(request.extra ?? []), 'Cálculos propios:', ...credits.calcs.map((c) => `- ${c}`)];
       if (credits.images.length) request.extra = [...(request.extra ?? []), 'Imágenes:', ...credits.images.map((c) => `- ${c}`)];
+      if (credits.music.length) request.extra = [...(request.extra ?? []), 'Música:', ...credits.music.map((c) => `- ${c}`)];
       try {
         return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: voice ? {
           tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
@@ -613,7 +673,7 @@ const server = createServer(async (req, res) => {
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
       const credits = creditsWithArt(baseScenes, s);
       const artScenes = withArt(baseScenes, s);
-      const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), scenes: credits.sources.length || credits.images.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
+      const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), music: musicFor(s), scenes: credits.sources.length || credits.images.length || credits.music.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
         return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, voice ? {

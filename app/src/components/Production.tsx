@@ -9,6 +9,7 @@ import { flushProject, presetOf, specKey, voiceOf, type Project } from '../proje
 import { StyleSelector } from './StyleSelector.tsx';
 import { Illustrations } from './Illustrations.tsx';
 import { Subtitles } from './Subtitles.tsx';
+import { Music } from './Music.tsx';
 import { Verification } from './Verification.tsx';
 import { Head, PLATFORMS, Status, card, field, primary, type P } from './ui.tsx';
 
@@ -130,6 +131,7 @@ export function StepProduction({ project, set }: P) {
       <StyleSelector project={project} set={set} />
       <Subtitles project={project} set={set} />
       <Illustrations project={project} set={set} />
+      <Music project={project} set={set} />
       <Verification project={project} set={set} />
     </div>
   );
