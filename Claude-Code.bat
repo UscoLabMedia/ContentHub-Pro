@@ -9,7 +9,7 @@ if exist "%ProgramFiles%\Git\cmd\git.exe" set "PATH=%ProgramFiles%\Git\cmd;%PATH
 if exist "%APPDATA%\npm" set "PATH=%APPDATA%\npm;%PATH%"
 if exist "%USERPROFILE%\.local\bin" set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 
-claude --version >nul 2>nul
+call claude --version >nul 2>nul
 if errorlevel 1 goto :sin_claude
 
 echo.
@@ -23,15 +23,15 @@ choice /c 123 /n /t 10 /d 1 /m "Elige 1, 2 o 3 (en 10 segundos se abre la opcion
 if errorlevel 3 goto :remoto
 if errorlevel 2 goto :seguir
 
-claude
+call claude
 goto :fin
 
 :seguir
-claude --continue
+call claude --continue
 goto :fin
 
 :remoto
-claude remote-control
+call claude remote-control
 goto :fin
 
 :sin_claude
@@ -43,9 +43,9 @@ choice /c SN /n /m "Quieres instalarlo ahora con npm? (S/N): "
 if errorlevel 2 goto :fin
 call npm install -g @anthropic-ai/claude-code
 set "PATH=%APPDATA%\npm;%PATH%"
-claude --version >nul 2>nul
+call claude --version >nul 2>nul
 if errorlevel 1 goto :fallo
-claude
+call claude
 goto :fin
 
 :sin_node
