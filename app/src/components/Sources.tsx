@@ -115,6 +115,7 @@ export function Sources({ selected, onPick }: { selected: string; onPick: (idea:
                       <button key={k} className={card(selected === i.title)} onClick={() => onPick(i, s)}>
                         <div className="flex flex-wrap gap-2 text-[10px]">
                           <span className="rounded bg-indigo-500/20 px-2 py-0.5 text-indigo-300">{i.platform}</span>
+                          {i.score !== undefined && <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-semibold text-emerald-300" title="Qué tan interesante, viral, curioso, relevante y significativo es (1-10)">★ {i.score}/10</span>}
                           <span className="rounded bg-slate-800 px-2 py-0.5 text-slate-300">{i.format}</span>
                           {s.timed && i.endSec > i.startSec && <span className="rounded bg-slate-800 px-2 py-0.5 text-slate-300">{mmss(i.startSec)}–{mmss(i.endSec)}</span>}
                         </div>

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { TRIM_PAD, keptMask, keptText, wordSpans } from '../src/sources/review.ts';
+import { SourceIdeasOut } from '../src/schemas.ts';
 import { attachConfidence, blocksToLines, lineIdsInRange, mergeLines, reviewFlags, toReviewLines, usableBlock, Vault, type BlobStorage, type Segment } from '../src/index.ts';
 
 const seg = (start: number, end: number, text: string, conf?: number): Segment => ({ start, end, text, conf });
@@ -76,5 +78,48 @@ describe('encrypted audio copy', () => {
     await expect(vault.openBytes(firstTwo)).rejects.toThrow();
     const small = await vault.sealBytes(new Uint8Array(0));
     expect((await vault.openBytes(small)).length).toBe(0);
+  });
+});
+
+describe('trimming a passage by words', () => {
+  const lines = [{ start: 10, end: 14, text: 'Hola a todos bienvenidos' }, { start: 14, end: 18, text: 'al programa de hoy' }];
+  it('gives every word a time inside its line, in order, covering the line', () => {
+    const w = wordSpans(lines);
+    expect(w.map((x) => x.word)).toEqual(['Hola', 'a', 'todos', 'bienvenidos', 'al', 'programa', 'de', 'hoy']);
+    expect(w[0]!.from).toBe(10);
+    expect(w[3]!.to).toBeCloseTo(14, 6);
+    expect(w[4]!.from).toBeCloseTo(14, 6);
+    expect(w[7]!.to).toBeCloseTo(18, 6);
+    for (let i = 1; i < w.length; i++) expect(w[i]!.from).toBeGreaterThanOrEqual(w[i - 1]!.from);
+    expect(w[3]!.to - w[3]!.from).toBeGreaterThan(w[1]!.to - w[1]!.from); // a long word lasts longer than "a"
+  });
+  it('removes the first words when the start moves, and the last ones when the end moves', () => {
+    const w = wordSpans(lines);
+    expect(keptText(w, w[2]!.from - TRIM_PAD, 18)).toBe('todos bienvenidos al programa de hoy');
+    expect(keptText(w, 10, w[5]!.to + TRIM_PAD)).toBe('Hola a todos bienvenidos al programa');
+    expect(keptText(w, w[2]!.from - TRIM_PAD, w[5]!.to + TRIM_PAD)).toBe('todos bienvenidos al programa');
+    expect(keptText(w, 10, 18)).toBe('Hola a todos bienvenidos al programa de hoy');
+  });
+  it('a word cut in half stays only if more than half of it is kept', () => {
+    const w = wordSpans(lines);
+    const mid = (w[1]!.from + w[1]!.to) / 2;
+    expect(keptMask(w, mid - 0.001, 18)[1]).toBe(true);
+    expect(keptMask(w, mid + 0.001, 18)[1]).toBe(false);
+  });
+  it('handles empty input', () => {
+    expect(wordSpans([])).toEqual([]);
+    expect(keptText([], 0, 5)).toBe('');
+  });
+});
+
+describe('AI suggestions with a score', () => {
+  const idea = { title: 'T', platform: 'tiktok', format: 'f', hook: 'h', startSec: 1, endSec: 20, why: 'dato curioso' };
+  it('accepts a 1-10 score, and answers cached before the score existed', () => {
+    expect(SourceIdeasOut.safeParse({ summary: 's', ideas: [{ ...idea, score: 9 }] }).success).toBe(true);
+    expect(SourceIdeasOut.safeParse({ summary: 's', ideas: [idea] }).success).toBe(true);
+  });
+  it('rejects a score outside 1-10', () => {
+    expect(SourceIdeasOut.safeParse({ summary: 's', ideas: [{ ...idea, score: 11 }] }).success).toBe(false);
+    expect(SourceIdeasOut.safeParse({ summary: 's', ideas: [{ ...idea, score: 0 }] }).success).toBe(false);
   });
 });

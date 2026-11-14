@@ -66,6 +66,8 @@ export const SourceIdeasOut = z.object({
       startSec: z.number(),
       endSec: z.number(),
       why: z.string(),
+      /** 1-10: how interesting, viral, curious, relevant and meaningful the passage is. Optional so answers cached before it existed still validate. */
+      score: z.number().min(1).max(10).optional(),
     }),
   ),
 });

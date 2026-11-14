@@ -127,5 +127,7 @@ export async function ideasFor(gw: Gateway, rec: SourceRecord, scope: 'all' | 's
     }
     body = `(Momentos clave extraídos de una fuente larga)\n${moments.join('\n')}`;
   }
-  return gw.run('contentIdeas', `ARCHIVO: ${rec.name}${scope === 'selection' ? ' (solo tramos confirmados por el creador)' : ''}\n${body}`);
+  const r = await gw.run('contentIdeas', `ARCHIVO: ${rec.name}${scope === 'selection' ? ' (solo tramos confirmados por el creador)' : ''}\n${body}`);
+  r.data.ideas.sort((a, b) => (b.score ?? 0) - (a.score ?? 0)); // best first, whatever order the model used
+  return r;
 }
