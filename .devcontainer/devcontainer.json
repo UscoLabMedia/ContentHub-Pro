@@ -2,7 +2,7 @@
   "name": "ContentHub Pro",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
   "features": { "ghcr.io/devcontainers/features/github-cli:1": {} },
-  "postCreateCommand": "npm run setup",
+  "postCreateCommand": "npm run setup && bash .devcontainer/install-whisper.sh",
   "forwardPorts": [5173, 8787],
   "customizations": { "vscode": { "extensions": ["dbaeumer.vscode-eslint", "bradlc.vscode-tailwindcss"] } }
 }
