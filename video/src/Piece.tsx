@@ -3,6 +3,23 @@ import type { VideoSpec } from '@chp/core/schemas';
 
 const DEFAULT_THEME = { bg: '#0f172a', fg: '#f8fafc', accent: '#6366f1' };
 
+/** Closing "Fuentes" card: title line + one source per line, left aligned and calm (no entrance motion). */
+const Card = ({ text, theme }: { text: string; theme: typeof DEFAULT_THEME }) => {
+  const { width, height } = useVideoConfig();
+  const [title, ...lines] = text.split('\n');
+  const portrait = height > width;
+  const size = width * (portrait ? 0.05 : 0.026);
+  return (
+    <AbsoluteFill style={{ background: theme.bg, justifyContent: 'center', padding: width * 0.08, fontFamily: 'Inter, system-ui, sans-serif' }}>
+      <div style={{ width: width * 0.12, height: 8, background: theme.accent, marginBottom: size }} />
+      <div style={{ color: theme.accent, fontSize: size * 1.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 4, marginBottom: size * 0.8 }}>{title}</div>
+      {lines.map((l, i) => (
+        <div key={i} style={{ color: theme.fg, fontSize: size, fontWeight: 600, lineHeight: 1.5, opacity: 0.92 }}>{l}</div>
+      ))}
+    </AbsoluteFill>
+  );
+};
+
 const Scene = ({ text, theme, audioUrl }: { text: string; theme: typeof DEFAULT_THEME; audioUrl?: string }) => {
   const frame = useCurrentFrame();
   const { fps, width } = useVideoConfig();
@@ -38,7 +55,7 @@ export const Piece = ({ scenes, theme }: VideoSpec) => {
         const dur = Math.max(1, Math.round(s.durationSec * fps));
         const el = (
           <Sequence key={i} from={from} durationInFrames={dur}>
-            <Scene text={s.text} theme={t} audioUrl={s.audioUrl} />
+            {s.card ? <Card text={s.text} theme={t} /> : <Scene text={s.text} theme={t} audioUrl={s.audioUrl} />}
           </Sequence>
         );
         from += dur;

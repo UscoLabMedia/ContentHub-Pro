@@ -8,7 +8,8 @@
     "./schemas": "./src/schemas.ts",
     "./production": "./src/production.ts",
     "./review": "./src/sources/review.ts",
-    "./deliverables": "./src/deliverables.ts"
+    "./deliverables": "./src/deliverables.ts",
+    "./verification": "./src/verification.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

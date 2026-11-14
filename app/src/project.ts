@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PLATFORM_PRESET, toSpec, type Scene } from '@chp/core/production';
 import type { DeliverableId, ShortRange } from '@chp/core/deliverables';
+import type { SceneCheck } from '@chp/core/verification';
 import type { PlatformId, PublishCopy } from '@chp/core/schemas';
 import { api } from './api.ts';
 
@@ -15,6 +16,8 @@ export interface Project {
   /** Where the chosen topic's data came from (name, link, metric). Empty for topics typed by hand. */
   topicEvidence: { source: string; url?: string; metric?: string }[];
   voice: { mode: 'unset' | 'narrate' | 'silent'; voiceId: string; speed: number };
+  /** Documentary mode: source checks per scene wording (see core/verification). Pending scenes block rendering. */
+  verification: Record<string, SceneCheck>;
   production: { preset: string; themeIdx: number; scenes: Scene[] };
   renders: { draft: RenderRef | null; draftApproved: boolean; final: RenderRef | null };
   publish: { copy: PublishCopy[] | null; posted: { platform: string; url: string; date: string }[] };
@@ -43,6 +46,7 @@ export const EMPTY_PROJECT: Project = {
   source: null,
   topicEvidence: [],
   voice: { mode: 'unset', voiceId: '', speed: 1 },
+  verification: {},
   production: { preset: '', themeIdx: 0, scenes: [] },
   renders: { draft: null, draftApproved: false, final: null },
   publish: { copy: null, posted: [] },
@@ -55,6 +59,12 @@ export const presetOf = (p: Project): string => p.production.preset || defaultPr
 export const voiceOf = (p: Project) => (p.voice.mode === 'narrate' && p.voice.voiceId ? { id: p.voice.voiceId, speed: p.voice.speed } : null);
 export const specKey = (p: Project): string => JSON.stringify({ spec: toSpec(presetOf(p), p.production.scenes, p.production.themeIdx), voice: voiceOf(p) });
 
+let flushNow: (() => Promise<void>) | null = null;
+/** Saves any pending project change right now. Call before actions the server checks against the saved project. */
+export const flushProject = async (): Promise<void> => {
+  await flushNow?.();
+};
+
 /** Project state saved (encrypted) in the vault, debounced. */
 export function useProject() {
   const [project, setProject] = useState<Project | null>(null);
@@ -62,13 +72,19 @@ export function useProject() {
   useEffect(() => {
     api<{ project: Project | null }>('/api/project').then((r) => {
       const saved = r.project ?? ({} as Partial<Project>);
-      setProject({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
+      setProject({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
       loaded.current = true;
     });
   }, []);
   useEffect(() => {
     if (!project || !loaded.current) return;
-    const id = setTimeout(() => void api('/api/project', { method: 'PUT', json: { project } }), 600);
+    const save = async () => {
+      clearTimeout(id);
+      if (flushNow === save) flushNow = null;
+      await api('/api/project', { method: 'PUT', json: { project } });
+    };
+    const id = setTimeout(() => void save(), 600);
+    flushNow = save;
     return () => clearTimeout(id);
   }, [project]);
   return [project, setProject] as const;

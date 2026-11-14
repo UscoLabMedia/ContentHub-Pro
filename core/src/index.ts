@@ -4,6 +4,7 @@ export * from './schemas.ts';
 export * from './presets.ts';
 export * from './production.ts';
 export * from './deliverables.ts';
+export * from './verification.ts';
 export * from './voice/index.ts';
 export * from './radar/index.ts';
 export * from './util/proc.ts';

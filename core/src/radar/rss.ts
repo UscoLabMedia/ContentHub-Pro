@@ -1,5 +1,5 @@
 // Tiny RSS/XML reader (no dependencies) for the handful of public feeds the radar uses.
-const ENT: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+const ENT: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
 export const decode = (s: string): string =>
   s

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { DELIVERABLES, rangeSeconds, splitShortRanges, validateShorts, SHORT_MAX_SEC, type DeliverableId, type ShortRange } from '@chp/core/deliverables';
 import { THEMES, toSpec, totalDuration } from '@chp/core/production';
 import { api, getToken } from '../api.ts';
-import { presetOf, specKey, voiceOf, type Project } from '../project.ts';
+import { flushProject, presetOf, specKey, voiceOf, type Project } from '../project.ts';
 import { Head, field, primary, type P } from './ui.tsx';
 
 interface PkgFile {
@@ -65,6 +65,7 @@ export function StepDeliverables({ project, set }: P) {
     const copy = project.publish.copy?.[0];
     const theme = THEMES[project.production.themeIdx] ?? THEMES[0];
     try {
+      await flushProject();
       setJob(await api<PkgJob>('/api/deliverables', {
         method: 'POST',
         json: {

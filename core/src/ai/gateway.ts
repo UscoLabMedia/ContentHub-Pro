@@ -49,7 +49,7 @@ export class Gateway {
     const user = typeof input === 'string' ? input : JSON.stringify(input);
     const system = `${SHARED_SYSTEM}\n\n${TASK_PROMPTS[task]}`;
 
-    const key = await sha256(`${task}|${route.model}|${user}`);
+    const key = await sha256(`${task}|${route.model}|${system}|${user}`); // prompt changes must not serve stale answers
     const cache = this.d.store.get<Record<string, CacheEntry>>(CACHE_KEY) ?? {};
     const hit = cache[key];
     if (hit && this.now() - hit.t < CACHE_TTL) return { status: 'ok', data: hit.data as Out, cached: true };

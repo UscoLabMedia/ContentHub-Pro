@@ -18,6 +18,8 @@ export interface LlmRequest {
   system: string;
   user: string;
   schema: ZodType;
+  /** Allow web search and page fetching (Claude Code engine only). */
+  research?: boolean;
 }
 
 export interface LlmResponse {
@@ -35,6 +37,7 @@ export function createLlmClient(apiKey: string): LlmClient {
   const client = new Anthropic({ apiKey });
   return {
     async complete(req) {
+      if (req.research) throw new Error('La búsqueda web de fuentes necesita el motor «Mi cuenta de Claude Code» (Ajustes → Motor de IA).');
       const r = await client.messages.parse({
         model: req.model,
         max_tokens: req.maxTokens,
@@ -120,9 +123,13 @@ export function createClaudeCodeClient(opts: { command?: string[]; timeoutMs?: n
       let lastErr = '';
       for (let attempt = 0; attempt < 2; attempt++) {
         const r = await runClaude(
-          ['-p', '--output-format', 'json', '--model', CLI_MODEL[req.model], '--effort', req.effort, '--tools', '', '--no-session-persistence', '--system-prompt', system],
+          [
+            '-p', '--output-format', 'json', '--model', CLI_MODEL[req.model], '--effort', req.effort,
+            ...(req.research ? ['--tools', 'WebSearch,WebFetch', '--allowedTools', 'WebSearch,WebFetch'] : ['--tools', '']),
+            '--no-session-persistence', '--system-prompt', system,
+          ],
           user,
-          opts,
+          req.research ? { ...opts, timeoutMs: 600_000 } : opts,
         );
         let out: { is_error?: boolean; result?: string; structured_output?: unknown; usage?: Usage; stop_reason?: string };
         try {
