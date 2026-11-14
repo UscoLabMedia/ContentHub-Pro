@@ -120,7 +120,7 @@ export async function cutClip(o: CutOptions): Promise<Clip> {
     const head = ['-y', '-ss', String(original.startSec), '-t', String(lenSec), '-i', src, '-vn'];
     if (original.trimSilence) {
       const log = await runFfmpegLog(['-ss', String(original.startSec), '-t', String(lenSec), '-i', src, '-af', `silencedetect=n=${SILENCE_DB}dB:d=${SILENCE_MIN_SEC}`, '-f', 'null', '-']);
-      cuts = silenceCuts(parseSilences(log, lenSec), lenSec);
+      cuts = silenceCuts(parseSilences(log, lenSec), lenSec, { trimStart: !original.joinStart, trimEnd: !original.joinEnd });
     }
     await mkdir(join(file, '..'), { recursive: true });
     const raw = `${file}.${randomBytes(4).toString('hex')}.part.wav`;
@@ -133,7 +133,7 @@ export async function cutClip(o: CutOptions): Promise<Clip> {
       } else {
         await runFfmpeg([...head, ...out]);
       }
-      const faded = fadeWav(await readFile(raw), original.fadeMs ?? FADE_MS_DEFAULT);
+      const faded = fadeWav(await readFile(raw), original.fadeMs ?? FADE_MS_DEFAULT, { in: !original.joinStart, out: !original.joinEnd }); // a join with the next scene of the fragment must stay continuous
       if (!(wavInfo(faded).durationSec > 0.1)) throw new Error('El fragmento salió vacío: revisa los tiempos');
       await writeFile(`${file}.part`, faded);
       await rename(`${file}.part`, file);

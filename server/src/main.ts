@@ -11,7 +11,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
   Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
-  OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
+  OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, segmentsIn, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderCarouselSlide, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
@@ -1088,7 +1088,7 @@ const server = createServer(async (req, res) => {
       if (m[2] === 'text' && req.method === 'GET') {
         const a = Number(url.searchParams.get('start') ?? 0);
         const b = Number(url.searchParams.get('end') ?? 0);
-        return json(res, 200, { text: textForRange(rec.segments, a, b), durationSec: rec.durationSec, hasOriginal: hasOriginal(DATA_DIR, rec.id) });
+        return json(res, 200, { text: textForRange(rec.segments, a, b), segs: segmentsIn(rec.segments, a, b).slice(0, 600).map(({ start, end, text }) => ({ start, end, text })), durationSec: rec.durationSec, hasOriginal: hasOriginal(DATA_DIR, rec.id) });
       }
       if (m[2] === 'lines' && req.method === 'GET')
         return json(res, 200, { lines: toReviewLines(rec.segments), hasAudio: !!rec.audio, selection: rec.selection ?? [], reviewed: !!rec.reviewed });
