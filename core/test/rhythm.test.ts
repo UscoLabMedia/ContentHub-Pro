@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BeatWordsOut, DEFAULT_SFX, DEFAULT_STYLE, beatTimes, heroStartSec, heroWordIndex, matchBeatWords, normalizeSfx, readingSeconds, segmentCount, sceneWordTimes, sfxEvents, withSpokenTimes, wordTimings } from '../src/index.ts';
+import { BeatWordsOut, DEFAULT_SFX, DEFAULT_STYLE, StyleSchema, VideoSpec, beatTimes, isKeyWord, keyWordsOf, heroStartSec, heroWordIndex, matchBeatWords, normalizeSfx, readingSeconds, segmentCount, sceneWordTimes, sfxEvents, withSpokenTimes, wordTimings } from '../src/index.ts';
 
 const sc = { text: 'El satélite viaja a 20.200 km de altura y orbita la Tierra', durationSec: 12, speechSec: 10 };
 
@@ -75,5 +75,26 @@ describe('sound effects follow the rhythm', () => {
     expect(normalizeSfx({ beat: 'nope' }).beat).toBe('tick');
     expect(normalizeSfx({ beat: 'none' }).beat).toBe('none');
     expect(normalizeSfx(undefined).beat).toBe('tick');
+  });
+});
+
+describe('key words in the subtitles', () => {
+  it('takes the words marked with asterisks and the beat words, without accents or case', () => {
+    expect(keyWordsOf({ text: 'Fue una *belleza extraordinaria* en Cartagena', beatWords: ['Cartagena'] }).sort()).toEqual(['belleza', 'cartagena', 'extraordinaria']);
+    expect(keyWordsOf({ text: 'Sin marcas' })).toEqual([]);
+  });
+  it('stands out a figure always, and a key word whatever its accents, case or punctuation', () => {
+    const keys = keyWordsOf({ text: 'Los *satélites* orbitan', beatWords: [] });
+    expect(isKeyWord('SATELITES', keys)).toBe(true);
+    expect(isKeyWord('satélites', keys)).toBe(true);
+    expect(isKeyWord('orbitan', keys)).toBe(false);
+    expect(isKeyWord('20.200', [])).toBe(true);
+    expect(isKeyWord('km', undefined)).toBe(false);
+  });
+  it('the video spec and the style accept the new fields', () => {
+    const style = { id: 's', name: 'n', blurb: 'b', palette: { bg: '#000000', fg: '#ffffff', accent: '#ff0000', accent2: '#00ff00' }, background: 'paper', motion: 0.5, subtitle: { uppercase: false, marker: false, position: 'bottom' }, particles: false };
+    expect(StyleSchema.safeParse({ ...style, paperCut: true }).success).toBe(true);
+    expect(StyleSchema.safeParse(style).success).toBe(true);
+    expect(VideoSpec.safeParse({ preset: 'tiktok', scenes: [{ text: 'x', durationSec: 3, keywords: ['a'] }] }).success).toBe(true);
   });
 });

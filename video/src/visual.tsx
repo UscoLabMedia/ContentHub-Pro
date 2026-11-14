@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Easing, Img, Loop, OffthreadVideo, interpolate, random, spring } from 'remotion';
 import { animFor, captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
+import { isKeyWord } from '@chp/core/rhythm';
 import { captionGroups, formatCount, withSpokenTimes, wordTimings, readingSeconds, type CameraKind, type HeroNumber, type StyleProfile } from '@chp/core/style';
 
 export interface Cam {
@@ -130,17 +131,59 @@ export const Broll = ({ broll, style, durationInFrames, fps }: { broll: { url: s
   );
 };
 
-/** The scene's illustration: enters with a spring, floats slowly, and sits above the subtitles (below the giant number if any). */
-export const Art = ({ art, style, frame, fps, width, height, hasHero }: { art: { url: string; kind: 'image' | 'svg' }; style: StyleProfile; frame: number; fps: number; width: number; height: number; hasHero: boolean }) => {
-  const enter = spring({ frame: frame - 6, fps, config: { damping: 13, stiffness: 110 } });
+/** A torn edge: points around a rectangle, each pushed inward by an uneven amount (a slow wave plus fine noise). */
+const tornPolygon = (seed: string, steps = 96, amp = 3.4): string => {
+  const n = Math.round(steps / 4);
+  const pts: string[] = [];
+  for (let side = 0; side < 4; side++) {
+    for (let i = 0; i < n; i++) {
+      const u = (i / n) * 100;
+      const d = amp * (0.3 + 0.35 * Math.abs(Math.sin(i * 0.85 + side * 2.1 + random(`${seed}w`) * 6)) + 0.45 * random(`${seed}-${side}-${i}`));
+      const [x, y] = side === 0 ? [u, d] : side === 1 ? [100 - d, u] : side === 2 ? [100 - u, 100 - d] : [d, 100 - u];
+      pts.push(`${x.toFixed(2)}% ${y.toFixed(2)}%`);
+    }
+  }
+  return `polygon(${pts.join(',')})`;
+};
+
+/** A paper cut-out: cream margin, irregular torn edge, grain and a soft shadow (the look of the paper-collage reels). */
+const TornCard = ({ children, seed, paper, size }: { children: ReactNode; seed: string; paper: string; size: number }) => (
+  <div style={{ position: 'absolute', inset: 0, filter: `drop-shadow(${size * 0.012}px ${size * 0.02}px ${size * 0.02}px rgba(0,0,0,0.38))` }}>
+    <div style={{ position: 'absolute', inset: 0, background: paper, clipPath: tornPolygon(seed), padding: '9%', boxSizing: 'border-box' }}>
+      {children}
+      <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.14, mixBlendMode: 'multiply', pointerEvents: 'none' }}>
+        <filter id={`grain-${seed}`}><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed={Math.round(random(`${seed}g`) * 99)} /></filter>
+        <rect width="100%" height="100%" filter={`url(#grain-${seed})`} />
+      </svg>
+    </div>
+  </div>
+);
+
+const paperOf = (bg: string): string => {
+  const n = parseInt(bg.slice(1), 16);
+  return 0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255) > 150 ? '#fffaf0' : '#f4ead5';
+};
+
+/**
+ * The scene's illustration: enters with a spring, floats slowly, and sits above the subtitles (below the giant number if any).
+ * As a paper cut-out (the paper style, or when chosen) it is a torn card that bounces in and shakes a little, one pose every 1/8 s.
+ */
+export const Art = ({ art, style, frame, fps, width, height, hasHero, index = 0 }: { art: { url: string; kind: 'image' | 'svg' }; style: StyleProfile; frame: number; fps: number; width: number; height: number; hasHero: boolean; index?: number }) => {
+  const cut = style.paperCut ?? style.background === 'paper';
+  const enter = spring({ frame: frame - 6, fps, config: cut ? { damping: 9, stiffness: 150 } : { damping: 13, stiffness: 110 } });
   const portrait = height > width;
-  const box = Math.min(width, height) * (hasHero ? 0.42 : portrait ? 0.62 : 0.66);
+  const box = Math.min(width, height) * (hasHero ? 0.42 : portrait ? 0.62 : 0.66) * (cut ? 1.12 : 1); // the paper margin takes space: the card is a bit larger
   const top = hasHero ? (portrait ? 0.4 : 0.44) : style.subtitle.position === 'center' ? 0.12 : portrait ? 0.2 : 0.1;
   const bob = Math.sin(frame / (fps * 0.9)) * box * 0.012;
-  const sticker = style.background === 'paper';
+  const pose = Math.floor(frame / (fps / 8)); // stop-motion: a new pose 8 times a second
+  const jx = cut ? (random(`ax${index}-${pose}`) - 0.5) * 6 : 0;
+  const jy = cut ? (random(`ay${index}-${pose}`) - 0.5) * 6 : 0;
+  const jr = cut ? (random(`ar${index}-${pose}`) - 0.5) * 1.4 + (random(`at${index}`) - 0.5) * 6 : 0; // a fixed tilt per scene plus the shake
+  const sticker = style.background === 'paper' && !cut;
+  const img = <Img src={art.url} style={{ width: '100%', height: '100%', objectFit: 'contain', ...(cut ? {} : { filter: sticker ? `drop-shadow(0 0 0 #fff) drop-shadow(${box * 0.012}px ${box * 0.016}px 0 ${style.palette.fg}55)` : `drop-shadow(0 ${box * 0.02}px ${box * 0.03}px rgba(0,0,0,0.25))`, borderRadius: art.kind === 'image' && !sticker ? box * 0.04 : 0 }) }} />;
   return (
-    <div style={{ position: 'absolute', left: '50%', top: `${top * 100}%`, width: box, height: box, marginLeft: -box / 2, transform: `translateY(${bob}px) scale(${0.55 + 0.45 * enter}) rotate(${(1 - enter) * -6 + (sticker ? -2 : 0)}deg)`, opacity: Math.min(1, enter * 1.5) }}>
-      <Img src={art.url} style={{ width: '100%', height: '100%', objectFit: 'contain', filter: sticker ? `drop-shadow(0 0 0 #fff) drop-shadow(${box * 0.012}px ${box * 0.016}px 0 ${style.palette.fg}55)` : `drop-shadow(0 ${box * 0.02}px ${box * 0.03}px rgba(0,0,0,0.25))`, borderRadius: art.kind === 'image' && !sticker ? box * 0.04 : 0 }} />
+    <div style={{ position: 'absolute', left: '50%', top: `${top * 100}%`, width: box, height: box, marginLeft: -box / 2, transform: `translate(${jx}px, ${bob + jy}px) scale(${0.55 + 0.45 * enter}) rotate(${(1 - enter) * -6 + (sticker ? -2 : 0) + jr}deg)`, opacity: Math.min(1, enter * 1.5) }}>
+      {cut ? <TornCard seed={`art${index}`} paper={paperOf(style.palette.bg)} size={box}>{img}</TornCard> : img}
     </div>
   );
 };
@@ -151,7 +194,7 @@ const readable = (hex: string) => {
 };
 
 /** Subtitles: up to N words at a time; the spoken word is marked; each group enters with the scene's animation. */
-export const Karaoke = ({ text, style, frame, fps, speechSec, wordTimes, durationSec, width, height, index }: { text: string; wordTimes?: { from: number; to: number }[]; style: StyleProfile; frame: number; fps: number; speechSec?: number; durationSec: number; width: number; height: number; index: number }) => {
+export const Karaoke = ({ text, style, frame, fps, speechSec, wordTimes, durationSec, width, height, index, keywords }: { text: string; keywords?: string[]; wordTimes?: { from: number; to: number }[]; style: StyleProfile; frame: number; fps: number; speechSec?: number; durationSec: number; width: number; height: number; index: number }) => {
   const cap = captionsOf(style);
   const span = Math.max(0.6, Math.min(speechSec ?? readingSeconds(text), durationSec - 0.35));
   const words = withSpokenTimes(wordTimings(text, 0.15, span), wordTimes);
@@ -193,9 +236,10 @@ export const Karaoke = ({ text, style, frame, fps, speechSec, wordTimes, duratio
           const wp = spring({ frame: frame - Math.round(w.from * fps), fps, config: { damping: 11, stiffness: 220 } });
           const h = cap.highlight;
           const marked = active && h.mode !== 'none';
+          const emph = isKeyWord(w.word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''), keywords); // key words: bigger, italic, in the highlight color
           const shown = anim === 'typewriter' ? w.word.slice(0, Math.max(1, Math.ceil(w.word.length * Math.min(1, (t - w.from) / 0.22)))) : w.word;
           return (
-            <span key={`${g}-${i}`} style={{ display: 'inline-block', padding: `0 ${fs * 0.14}px`, borderRadius: fs * 0.12, background: marked && h.mode === 'box' ? h.color : 'transparent', color: marked ? (h.mode === 'box' ? h.textColor : h.mode === 'color' ? h.color : cap.color) : cap.color, borderBottom: marked && h.mode === 'underline' ? `${fs * 0.09}px solid ${h.color}` : undefined, transform: `${ge.transform ?? ''} scale(${active ? 1 + 0.12 * Math.min(1, wp) : 1}) rotate(${marked && h.mode === 'box' ? -2 : 0}deg)`, opacity: ge.opacity, filter: ge.filter, clipPath: ge.clipPath, textTransform: tx, WebkitTextStroke: marked && h.mode === 'box' ? undefined : sw > 0 ? `${sw}px ${cap.stroke.color}` : undefined, paintOrder: 'stroke fill', textShadow: cap.shadow && !(marked && h.mode === 'box') ? `0 ${fs * 0.05}px 0 ${cap.stroke.color}88` : undefined }}>{shown}</span>
+            <span key={`${g}-${i}`} style={{ display: 'inline-block', padding: `0 ${fs * 0.14}px`, borderRadius: fs * 0.12, background: marked && h.mode === 'box' ? h.color : 'transparent', color: marked ? (h.mode === 'box' ? h.textColor : h.mode === 'color' ? h.color : cap.color) : emph ? (h.mode === 'none' ? style.palette.accent : h.color) : cap.color, fontStyle: emph ? 'italic' : undefined, fontSize: emph ? fs * 1.12 : undefined, borderBottom: marked && h.mode === 'underline' ? `${fs * 0.09}px solid ${h.color}` : undefined, transform: `${ge.transform ?? ''} scale(${active ? 1 + 0.12 * Math.min(1, wp) : 1}) rotate(${marked && h.mode === 'box' ? -2 : 0}deg)`, opacity: ge.opacity, filter: ge.filter, clipPath: ge.clipPath, textTransform: tx, WebkitTextStroke: marked && h.mode === 'box' ? undefined : sw > 0 ? `${sw}px ${cap.stroke.color}` : undefined, paintOrder: 'stroke fill', textShadow: cap.shadow && !(marked && h.mode === 'box') ? `0 ${fs * 0.05}px 0 ${cap.stroke.color}88` : undefined }}>{shown}</span>
           );
         })}
       </div>
