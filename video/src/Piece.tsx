@@ -8,7 +8,7 @@ import { heroStartSec, segmentCount } from '@chp/core/rhythm';
 import { hookEndSec } from '@chp/core/hookcta';
 import { captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
 import { CtaCard, Hook } from './hookcta.tsx';
-import { Art, Background, Broll, Hero, Karaoke, Motif, Particles, camTransform, camera } from './visual.tsx';
+import { Art, Background, Broll, Hero, Karaoke, KeyPhrase, Motif, Particles, camTransform, camera } from './visual.tsx';
 
 export const styleOf = (spec: { style?: unknown; theme?: VideoSpec['theme'] }): StyleProfile => {
   if (spec.style) return spec.style as StyleProfile;
@@ -70,6 +70,7 @@ const Scene = ({ scene, index, style }: { scene: VideoSpec['scenes'][number]; in
         </>
       )}
       {scene.art && <Art art={scene.art} style={style} frame={frame} fps={fps} width={width} height={height} hasHero={!!hero} index={index} />}
+      {!scene.art && !scene.broll && !hero && <KeyPhrase scene={scene} style={style} frame={frame} fps={fps} width={width} height={height} />}
       {hero && <Hero hero={hero} style={style} frame={frame} fps={fps} width={width} height={height} startFrame={heroFrame} />}
       <Particles style={style} frame={frame} index={index + 7} width={width} height={height} />
       <Karaoke text={scene.text} keywords={scene.keywords} style={style} frame={frame} fps={fps} speechSec={scene.speechSec} wordTimes={scene.wordTimes} durationSec={scene.durationSec} width={width} height={height} index={index} />

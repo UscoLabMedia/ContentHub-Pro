@@ -77,3 +77,22 @@ export function keyWordsOf(sc: { text: string; beatWords?: string[] }): string[]
   return [...new Set([...marked, ...(sc.beatWords ?? [])].map(norm).filter(Boolean))];
 }
 export const isKeyWord = (word: string, keys?: string[]): boolean => /\d/.test(word) || (!!keys && keys.includes(norm(word)));
+
+// ---------------------------------------------------------------------------- scenes without a picture
+/** Little words that never make a good giant caption. */
+const SMALL = new Set(['para', 'pero', 'como', 'esta', 'este', 'esto', 'estos', 'estas', 'cuando', 'donde', 'porque', 'entre', 'sobre', 'desde', 'hasta', 'tiene', 'tienen', 'pueden', 'puede', 'hacer', 'cada', 'todo', 'todos', 'todas', 'mucho', 'muchos', 'nunca', 'siempre', 'ahora', 'ellos', 'ellas', 'también', 'además', 'solo', 'sólo', 'según']);
+/**
+ * The words to show giant when a scene has no picture: the ones marked with *asterisks* or chosen as beats, else the longest
+ * content words (at most 3, in the order they are said). Each keeps its position among the displayed words so it can appear
+ * when the voice says it.
+ */
+export function keyPhrase(sc: { text: string; beatWords?: string[] }, max = 3): { word: string; index: number }[] {
+  const shown = sc.text.replace(/\*/g, '').split(/\s+/).filter(Boolean);
+  const clean = (w: string) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}%]+$/gu, '');
+  const keys = keyWordsOf(sc);
+  const items = shown.map((w, index) => ({ word: clean(w), index })).filter((x) => x.word.length > 0);
+  // A figure travels with the word after it ("7 millones"), so it is never alone on the screen.
+  const marked = items.filter((x, i) => keys.includes(norm(x.word)) || /\d/.test(x.word) || (i > 0 && /\d/.test(items[i - 1]!.word)));
+  const pool = marked.length ? marked : items.filter((x) => x.word.length >= 5 && !SMALL.has(x.word.toLowerCase())).sort((a, b) => b.word.length - a.word.length || a.index - b.index);
+  return pool.slice(0, max).sort((a, b) => a.index - b.index);
+}

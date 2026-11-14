@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Easing, Img, Loop, OffthreadVideo, interpolate, random, spring } from 'remotion';
 import { animFor, captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
-import { isKeyWord } from '@chp/core/rhythm';
+import { isKeyWord, keyPhrase, sceneWordTimes } from '@chp/core/rhythm';
 import { captionGroups, formatCount, withSpokenTimes, wordTimings, readingSeconds, type CameraKind, type HeroNumber, type StyleProfile } from '@chp/core/style';
 
 export interface Cam {
@@ -115,6 +115,31 @@ export const Hero = ({ hero, style, frame, fps, width, height, startFrame = 4 }:
     <div style={{ position: 'absolute', left: 0, right: 0, top: portrait ? '16%' : '12%', display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${0.6 + 0.4 * enter})`, opacity: Math.min(1, enter * 1.4), filter: `blur(${(1 - Math.min(1, enter)) * 8}px)` }}>
       <div style={{ fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 900, fontSize: size, lineHeight: 1, color: style.palette.accent, textShadow: `0 ${size * 0.04}px 0 ${style.palette.fg}22`, letterSpacing: -2 }}>{formatCount(count, hero)}</div>
       {hero.unit && <div style={{ fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 800, fontSize: size * 0.34, color: style.palette.fg, opacity: 0.9, marginTop: size * 0.04 }}>{hero.unit}</div>}
+    </div>
+  );
+};
+
+/**
+ * A scene with no picture, number or clip: its key words giant and stacked in the middle, each one landing (with a bounce) when the
+ * voice says it. Replaces the empty background so no scene is ever just shapes and a small caption.
+ */
+export const KeyPhrase = ({ scene, style, frame, fps, width, height }: { scene: { text: string; beatWords?: string[]; durationSec: number; speechSec?: number; wordTimes?: { from: number; to: number }[] }; style: StyleProfile; frame: number; fps: number; width: number; height: number }) => {
+  const phrase = keyPhrase(scene);
+  if (!phrase.length) return null;
+  const times = sceneWordTimes(scene);
+  const portrait = height > width;
+  const longest = Math.max(...phrase.map((x) => x.word.length));
+  const size = Math.min(width * (portrait ? 0.2 : 0.12), (width * (portrait ? 0.86 : 0.7)) / Math.max(3, longest * 0.62));
+  return (
+    <div style={{ position: 'absolute', left: 0, right: 0, top: portrait ? '12%' : '8%', bottom: portrait ? '30%' : '24%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: size * 0.08 }}>
+      {phrase.map((x, i) => {
+        const at = Math.max(3, Math.round((times[x.index]?.from ?? i * 0.5) * fps) - 3);
+        if (frame < at) return null;
+        const sp = spring({ frame: frame - at, fps, config: { damping: 9, stiffness: 160 } });
+        return (
+          <div key={i} style={{ fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 900, fontSize: size, lineHeight: 0.95, textTransform: 'uppercase', letterSpacing: -2, color: i % 2 === 0 ? style.palette.accent : style.palette.fg, textShadow: `0 ${size * 0.05}px 0 ${style.palette.bg}`, transform: `scale(${0.4 + 0.6 * Math.min(1.12, sp)}) rotate(${(i % 2 ? 1 : -1) * 2.2 * (1 - Math.min(1, sp))}deg)`, opacity: Math.min(1, sp * 2), maxWidth: '94%', textAlign: 'center', wordBreak: 'keep-all' }}>{x.word}</div>
+        );
+      })}
     </div>
   );
 };

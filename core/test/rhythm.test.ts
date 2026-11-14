@@ -98,3 +98,19 @@ describe('key words in the subtitles', () => {
     expect(VideoSpec.safeParse({ preset: 'tiktok', scenes: [{ text: 'x', durationSec: 3, keywords: ['a'] }] }).success).toBe(true);
   });
 });
+
+import { keyPhrase } from '../src/rhythm.ts';
+describe('keyPhrase', () => {
+  it('uses the marked words first, in spoken order', () => {
+    expect(keyPhrase({ text: 'Las *bacterias* pesan casi *dos* kilos' }).map((x) => x.word)).toEqual(['bacterias', 'dos']);
+  });
+  it('falls back to the longest content words', () => {
+    const k = keyPhrase({ text: 'Y la mayoría de la gente nunca lo supo jamás' }).map((x) => x.word);
+    expect(k).toEqual(['mayoría', 'gente', 'jamás']);
+  });
+  it('keeps figures and never exceeds three', () => {
+    const k = keyPhrase({ text: 'Cada día se pierden 7 millones de árboles gigantes enormes' });
+    expect(k.length).toBeLessThanOrEqual(3);
+    expect(k.map((x) => x.word)).toEqual(['7', 'millones']);
+  });
+});
