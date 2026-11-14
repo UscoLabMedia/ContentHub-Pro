@@ -15,7 +15,7 @@ import { edgeProvider } from './voice-online.ts';
 import { KokoroEngine } from './kokoro.ts';
 import { cloneDir } from './voiceclone.ts';
 import { cutClip, dropOriginal, hasOriginal, keepOriginal } from './original.ts';
-import { searchBroll, FONTS, SFX_LIBRARY, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
+import { searchBroll, FONTS, SFX_LIBRARY, MOODS, synthMusic, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
 import { existsSync } from 'node:fs';
 
 export type Status = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skip';
@@ -170,6 +170,10 @@ export const CHECKS: Check[] = [
   { id: 'sfx', label: 'Efectos de sonido (generados en tu PC)', group: 'Video', run: async () => {
     for (const x of SFX_LIBRARY) if (synthSfx(x.id).length < 100) throw new Error(`El sonido «${x.label}» salió vacío`);
     return `${SFX_LIBRARY.length} sonidos generados correctamente`;
+  } },
+  { id: 'music-gen', label: 'Música generada (sin licencias, en tu PC)', group: 'Video', run: async () => {
+    for (const m of MOODS) if (synthMusic(m.id).length < 44100 * 10) throw new Error(`La música «${m.label}» salió vacía`);
+    return `${MOODS.length} ánimos generados correctamente`;
   } },
   { id: 'edge', label: 'Voz en línea: Edge (gratis, no oficial)', group: 'Voz', run: async (c) => {
     try {

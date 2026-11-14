@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { checkableUrl, musicCredit, runFfmpeg, type MusicCandidate, type MusicRef } from '@chp/core';
+import { MOODS, checkableUrl, musicCredit, musicWav, runFfmpeg, type MoodId, type MusicCandidate, type MusicRef } from '@chp/core';
 import { assertPublic } from './verify.ts';
 
 const MAX_DOWNLOAD = 40 * 1024 * 1024;
@@ -77,4 +77,10 @@ export async function saveOwnMusic(dataDir: string, bytes: Uint8Array, meta: { t
   const id = sha16(bytes);
   await toMp3(bytes, musicPath(dataDir, id), musicDir(dataDir));
   return { id, title: meta.title.slice(0, 100) || 'Mi pista', artist: meta.artist.slice(0, 80), origin: 'own', durationSec: 0, credit: meta.credit.slice(0, 160) };
+}
+
+/** A lo-fi loop composed on this PC for the mood: no license, no credit, same mood = same track. */
+export async function generateMusic(dataDir: string, mood: MoodId): Promise<MusicRef> {
+  const label = MOODS.find((m) => m.id === mood)?.label ?? mood;
+  return saveOwnMusic(dataDir, musicWav(mood), { title: `Música generada · ${label}`, artist: 'ContentHub Pro', credit: '' });
 }

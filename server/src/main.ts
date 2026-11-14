@@ -24,7 +24,7 @@ import { KokoroEngine } from './kokoro.ts';
 import { ProfileError, VoiceCloneEngine, VoiceProfiles } from './voiceclone.ts';
 import { azureProvider, edgeProvider, fakeEdgeProvider, validAzure, type AzureConfig } from './voice-online.ts';
 import { buildSfxTrack, sfxTrackPath } from './sfx.ts';
-import { downloadMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
+import { downloadMusic, generateMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
 import { ART_MIME, artExists, artPath, artUrl, downloadArt, saveDrawn } from './art.ts';
 import { checkMany } from './verify.ts';
 import { cutClip, dropOriginal, hasOriginal, keepOriginal } from './original.ts';
@@ -761,6 +761,15 @@ const server = createServer(async (req, res) => {
         return json(res, 200, { music: await downloadMusic(DATA_DIR, { url: c.url, title: String(c.title ?? ''), artist: String(c.artist ?? ''), durationSec: Number(c.durationSec) || 0, license, licenseLabel: String(c.licenseLabel ?? '').slice(0, 30) }) });
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No pude descargar la pista' });
+      }
+    }
+    if (url.pathname === '/api/music/generate' && req.method === 'POST') {
+      const b = await readBody(req);
+      if (!isMood(String(b.mood ?? ''))) return json(res, 400, { error: 'Ánimo no válido' });
+      try {
+        return json(res, 200, { music: await generateMusic(DATA_DIR, b.mood as (typeof MOODS)[number]['id']) });
+      } catch (e) {
+        return json(res, 422, { error: e instanceof Error ? e.message : 'No pude generar la música' });
       }
     }
     if (url.pathname === '/api/music/own' && req.method === 'PUT') {
