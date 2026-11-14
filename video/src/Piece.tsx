@@ -28,7 +28,7 @@ const Card = ({ text, style }: { text: string; style: StyleProfile }) => {
 const Scene = ({ scene, index, style }: { scene: VideoSpec['scenes'][number]; index: number; style: StyleProfile }) => {
   const frame = useCurrentFrame();
   const { fps, width, height, durationInFrames } = useVideoConfig();
-  const cam = camera(index, frame, durationInFrames, style.motion);
+  const cam = camera(index, frame, durationInFrames, style.motion, style.cameraPattern);
   // Z-axis transition: arrives from far away, leaves toward the camera.
   const inP = interpolate(frame, [0, 10], [0, 1], { extrapolateRight: 'clamp' });
   const outP = interpolate(frame, [durationInFrames - 8, durationInFrames], [0, 1], { extrapolateLeft: 'clamp' });

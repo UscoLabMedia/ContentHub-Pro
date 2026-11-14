@@ -6,6 +6,7 @@ export * from './production.ts';
 export * from './deliverables.ts';
 export * from './verification.ts';
 export * from './style.ts';
+export * from './motion.ts';
 export * from './freesearch.ts';
 export * from './voice/index.ts';
 export * from './radar/index.ts';

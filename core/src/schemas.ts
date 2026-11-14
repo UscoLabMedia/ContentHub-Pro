@@ -103,7 +103,20 @@ export const StyleSchema = z.object({
   motion: z.number(),
   subtitle: z.object({ uppercase: z.boolean(), marker: z.boolean(), position: z.enum(['bottom', 'center']) }),
   particles: z.boolean(),
+  cameraPattern: z.array(z.enum(['zoomIn', 'zoomOut', 'panL', 'panR', 'push', 'still'])).optional(),
+  pace: z.number().optional(),
 });
+
+export const StyleSheetOut = z.object({
+  background: z.enum(['solid', 'paper', 'halftone', 'gradient']),
+  cutouts: z.boolean(),
+  handDrawn: z.boolean(),
+  particles: z.boolean(),
+  uppercaseText: z.boolean(),
+  highlightedWords: z.boolean(),
+  notes: z.string(),
+});
+export type StyleSheet = z.infer<typeof StyleSheetOut>;
 
 /** Input of the Remotion template; built locally from a script (zero tokens). */
 export const VideoSpec = z.object({
@@ -126,4 +139,5 @@ export const OUTPUT_SCHEMAS = {
   contentIdeas: SourceIdeasOut,
   publishCopy: PublishCopyOut,
   verifyClaims: VerifyOut,
+  styleFromSheet: StyleSheetOut,
 } as const;

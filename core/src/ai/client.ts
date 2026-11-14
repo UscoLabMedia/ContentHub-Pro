@@ -5,7 +5,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z, type ZodType } from 'zod';
@@ -20,6 +20,8 @@ export interface LlmRequest {
   schema: ZodType;
   /** Allow web search and page fetching (Claude Code engine only). */
   research?: boolean;
+  /** Absolute paths of PNG/JPEG images the model should look at. */
+  images?: string[];
 }
 
 export interface LlmResponse {
@@ -42,7 +44,7 @@ export function createLlmClient(apiKey: string): LlmClient {
         model: req.model,
         max_tokens: req.maxTokens,
         system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
-        messages: [{ role: 'user', content: req.user }],
+        messages: [{ role: 'user', content: req.images?.length ? [...req.images.map((p) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: p.toLowerCase().endsWith('.png') ? ('image/png' as const) : ('image/jpeg' as const), data: readFileSync(p).toString('base64') } })), { type: 'text' as const, text: req.user }] : req.user }],
         output_config: { effort: req.effort, format: zodOutputFormat(req.schema) },
       });
       return { parsed: r.parsed_output, usage: r.usage, stopReason: r.stop_reason };
@@ -67,12 +69,18 @@ export interface CliResult {
   stderr: string;
 }
 
+/** Working folder of the Claude Code engine (empty on purpose). Images the model must read are placed here. */
+export function claudeWorkDir(): string {
+  const d = join(tmpdir(), 'contenthub-claude');
+  mkdirSync(d, { recursive: true });
+  return d;
+}
+
 /** Runs the Claude Code CLI with the user's own login. Prompt goes through stdin (no length/quoting limits). */
 export function runClaude(args: string[], stdin = '', opts: { command?: string[]; timeoutMs?: number } = {}): Promise<CliResult> {
   const [cmd, ...pre] = opts.command ?? ['claude'];
   // Empty working dir: the CLI must not load this repo's CLAUDE.md/hooks (that would waste tokens).
-  const cwd = join(tmpdir(), 'contenthub-claude');
-  mkdirSync(cwd, { recursive: true });
+  const cwd = claudeWorkDir();
   return new Promise((resolve, reject) => {
     const all = [...pre, ...args];
     const child = WIN && !opts.command
@@ -119,13 +127,15 @@ export function createClaudeCodeClient(opts: { command?: string[]; timeoutMs?: n
     async complete(req) {
       const schemaText = JSON.stringify(z.toJSONSchema(req.schema));
       const system = `${req.system}\n\nResponde UNICAMENTE con un objeto JSON valido que cumpla el esquema que recibiras. Sin texto extra ni bloques de codigo.`;
-      let user = `ESQUEMA JSON:\n${schemaText}\n\nDATOS:\n${req.user}`;
+      const look = req.images?.length ? `IMÁGENES (ábrelas con la herramienta Read): ${req.images.join(', ')}\n\n` : '';
+      const tools = req.research ? ['WebSearch', 'WebFetch'] : req.images?.length ? ['Read'] : [];
+      let user = `${look}ESQUEMA JSON:\n${schemaText}\n\nDATOS:\n${req.user}`;
       let lastErr = '';
       for (let attempt = 0; attempt < 2; attempt++) {
         const r = await runClaude(
           [
             '-p', '--output-format', 'json', '--model', CLI_MODEL[req.model], '--effort', req.effort,
-            ...(req.research ? ['--tools', 'WebSearch,WebFetch', '--allowedTools', 'WebSearch,WebFetch'] : ['--tools', '']),
+            ...(tools.length ? ['--tools', tools.join(','), '--allowedTools', tools.join(',')] : ['--tools', '']),
             '--no-session-persistence', '--system-prompt', system,
           ],
           user,

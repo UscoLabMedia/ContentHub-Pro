@@ -2,7 +2,7 @@
 export type ModelId = 'claude-haiku-5-5' | 'claude-sonnet-5-5' | 'claude-opus-5-5';
 export type Task =
   | 'trends' | 'treatment' | 'audience' | 'formats' | 'script' | 'metricsAnalysis'
-  | 'sourceHighlights' | 'contentIdeas' | 'publishCopy' | 'verifyClaims';
+  | 'sourceHighlights' | 'contentIdeas' | 'publishCopy' | 'verifyClaims' | 'styleFromSheet';
 export type Effort = 'low' | 'medium' | 'high';
 
 export interface Route {
@@ -24,6 +24,7 @@ export const ROUTES: Record<Task, Route> = {
   sourceHighlights: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 1500 },
   contentIdeas: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 3000 },
   publishCopy: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 1400 },
+  styleFromSheet: { model: 'claude-haiku-5-5', effort: 'low', maxTokens: 500 },
   verifyClaims: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 6000, research: true },
 };
 

@@ -10,7 +10,8 @@
     "./review": "./src/sources/review.ts",
     "./deliverables": "./src/deliverables.ts",
     "./verification": "./src/verification.ts",
-    "./style": "./src/style.ts"
+    "./style": "./src/style.ts",
+    "./motion": "./src/motion.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

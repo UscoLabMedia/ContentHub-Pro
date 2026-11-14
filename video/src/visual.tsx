@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Easing, interpolate, random, spring } from 'remotion';
-import { captionGroups, formatCount, wordTimings, readingSeconds, type HeroNumber, type StyleProfile } from '@chp/core/style';
+import { captionGroups, formatCount, wordTimings, readingSeconds, type CameraKind, type HeroNumber, type StyleProfile } from '@chp/core/style';
 
 export interface Cam {
   s: number;
@@ -9,15 +9,19 @@ export interface Cam {
   r: number; // degrees
 }
 
-/** A different virtual-camera move per scene (zoom in, zoom out, pan, pan back, push with a slight tilt). */
-export function camera(index: number, frame: number, dur: number, motion: number): Cam {
+const DEFAULT_ORDER: CameraKind[] = ['zoomIn', 'zoomOut', 'panL', 'panR', 'push'];
+
+/** A virtual-camera move per scene: the style's copied pattern if it has one, otherwise a rotation of moves. */
+export function camera(index: number, frame: number, dur: number, motion: number, pattern?: CameraKind[]): Cam {
   const p = Easing.inOut(Easing.quad)(Math.min(1, frame / Math.max(1, dur)));
   const m = motion;
-  switch (index % 5) {
-    case 0: return { s: 1.02 + 0.09 * m * p, x: 0, y: 0, r: 0 };
-    case 1: return { s: 1.02 + 0.09 * m * (1 - p), x: 0, y: 0, r: 0 };
-    case 2: return { s: 1.07, x: (0.5 - p) * 6 * m, y: 0, r: 0 };
-    case 3: return { s: 1.07, x: (p - 0.5) * 6 * m, y: 0, r: 0 };
+  const kind = pattern && pattern.length ? pattern[index % pattern.length]! : DEFAULT_ORDER[index % DEFAULT_ORDER.length]!;
+  switch (kind) {
+    case 'zoomIn': return { s: 1.02 + 0.09 * m * p, x: 0, y: 0, r: 0 };
+    case 'zoomOut': return { s: 1.02 + 0.09 * m * (1 - p), x: 0, y: 0, r: 0 };
+    case 'panL': return { s: 1.07, x: (0.5 - p) * 6 * m, y: 0, r: 0 };
+    case 'panR': return { s: 1.07, x: (p - 0.5) * 6 * m, y: 0, r: 0 };
+    case 'still': return { s: 1.02, x: 0, y: 0, r: 0 };
     default: return { s: 1.03 + 0.08 * m * p, x: 0, y: (0.5 - p) * 3 * m, r: (p - 0.5) * 2.4 * m };
   }
 }
