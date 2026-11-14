@@ -11,6 +11,7 @@ export * from './subtitles.ts';
 export * from './captions.ts';
 export * from './freesearch.ts';
 export * from './illustrations.ts';
+export * from './music.ts';
 export * from './voice/index.ts';
 export * from './radar/index.ts';
 export * from './util/proc.ts';

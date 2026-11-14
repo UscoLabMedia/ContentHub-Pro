@@ -145,3 +145,7 @@ En el paso 7, sube un video de referencia: la app mide **en tu PC, sin gastar IA
 ## Subtítulos
 
 En el paso 7, sección **Subtítulos**: elige tipografía (10 fuentes libres incluidas o tu propio archivo .ttf/.otf/.woff2, cifrado en tu bóveda), colores, resaltado de la palabra dicha, posición, tamaño y **animación de entrada**. Marca varias animaciones para **alternarlas escena por escena**. También puedes **copiarlos de un video de referencia**: la app mide en tu PC la posición, el tamaño, los colores, la caja del resaltado y las palabras a la vez; «Afinar con IA» (1 consulta pequeña) describe el tipo de letra y la animación. Se usa la fuente libre más parecida, no la exacta.
+
+## Música de fondo
+
+En el paso 7, sección **Música**: elige un ánimo (o «Sugerir con IA», una consulta mínima), busca 3 pistas libres de Openverse (CC0, dominio público o CC BY), escúchalas y elige una. También puedes subir tu propio archivo (por ejemplo, una pista de YouTube Audio Library: escribe su atribución si la pide). La música baja sola mientras habla la voz, se ajusta a la duración del video (se corta con fundido o se repite) y entra y sale con fundido. Las pistas CC BY y las atribuciones que escribas salen en la pantalla final y en la descripción.

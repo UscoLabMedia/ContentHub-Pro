@@ -11,7 +11,7 @@ import {
 } from '@chp/core';
 import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
 import { checkSource } from './verify.ts';
-import { FONTS, searchArt, searchFree } from '@chp/core';
+import { FONTS, searchArt, searchFree, searchMusic } from '@chp/core';
 import { existsSync } from 'node:fs';
 
 export type Status = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skip';
@@ -117,6 +117,11 @@ export const CHECKS: Check[] = [
     const hits = await searchArt('satellite');
     if (!hits.length) throw new Warn('No encontró imágenes de prueba: puede que Openverse/Commons estén bloqueados; aún puedes dibujar con IA');
     return `Encontró ${hits.length} imagen(es) libres, por ejemplo «${hits[0]!.title}» (${hits[0]!.licenseLabel})`;
+  } },
+  { id: 'music', label: 'Música libre (Openverse)', group: 'Datos', run: async () => {
+    const hits = await searchMusic('calm piano');
+    if (!hits.length) throw new Warn('No encontró pistas de prueba: puede que Openverse esté bloqueado; aún puedes subir tu propia música');
+    return `Encontró ${hits.length} pista(s) libres, por ejemplo «${hits[0]!.title}» (${hits[0]!.licenseLabel})`;
   } },
   { id: 'ffmpeg', label: 'Audio/video: ffmpeg (incluido en Remotion)', group: 'Video', run: async (c) => {
     const dir = await mkdtemp(join(tmpdir(), 'chp-ff-'));
