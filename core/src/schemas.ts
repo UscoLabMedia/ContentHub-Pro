@@ -144,11 +144,14 @@ export const ArtQueriesOut = z.object({
   scenes: z.array(z.object({ key: z.string(), query: z.string().max(60), draw: z.string().max(160) })).max(40),
 });
 export const DrawOut = z.object({ svg: z.string().max(16000) });
+export const BeatWordsOut = z.object({
+  scenes: z.array(z.object({ key: z.string(), words: z.array(z.string().max(30)).max(2) })).max(60),
+});
 
 /** Input of the Remotion template; built locally from a script (zero tokens). */
 export const VideoSpec = z.object({
   preset: z.string(),
-  scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional(), card: z.boolean().optional(), speechSec: z.number().optional(), wordTimes: z.array(z.object({ from: z.number(), to: z.number() })).optional(), art: z.object({ url: z.string(), kind: z.enum(['image', 'svg']) }).optional(), broll: z.object({ url: z.string(), durationSec: z.number() }).optional(), original: z.object({ sourceId: z.string(), startSec: z.number(), endSec: z.number(), trimSilence: z.boolean().optional(), fadeMs: z.number().optional(), joinStart: z.boolean().optional(), joinEnd: z.boolean().optional() }).optional() })),
+  scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional(), card: z.boolean().optional(), speechSec: z.number().optional(), wordTimes: z.array(z.object({ from: z.number(), to: z.number() })).optional(), art: z.object({ url: z.string(), kind: z.enum(['image', 'svg']) }).optional(), broll: z.object({ url: z.string(), durationSec: z.number() }).optional(), beatWords: z.array(z.string().max(30)).max(3).optional(), beats: z.array(z.number()).max(12).optional(), original: z.object({ sourceId: z.string(), startSec: z.number(), endSec: z.number(), trimSilence: z.boolean().optional(), fadeMs: z.number().optional(), joinStart: z.boolean().optional(), joinEnd: z.boolean().optional() }).optional() })),
   theme: z.object({ bg: z.string(), fg: z.string(), accent: z.string() }).optional(),
   style: StyleSchema.optional(),
   /** Background music with its mix (the URL is added by the server). */
@@ -177,4 +180,5 @@ export const OUTPUT_SCHEMAS = {
   musicMood: MusicMoodOut,
   subtitleFromSheet: SubtitleSheetOut,
   drawIllustration: DrawOut,
+  beatWords: BeatWordsOut,
 } as const;

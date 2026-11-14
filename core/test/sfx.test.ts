@@ -52,7 +52,11 @@ describe('plan', () => {
   it('puts a whoosh at each scene change (not the first, not the card) and effects on numbers and art', () => {
     const e = sfxEvents(scenes, DEFAULT_STYLE, on());
     expect(e.filter((x) => x.sound === 'whoosh').map((x) => x.t)).toEqual([4, 7]);
-    expect(e.some((x) => x.sound === 'pop' && Math.abs(x.t - 0.13) < 1e-9)).toBe(true); // "24" in scene 1
+    // the number sound plays as the figure is said (shortly before its word), never earlier than 0.13 s into the scene
+    const pop = e.find((x) => x.sound === 'pop');
+    expect(pop).toBeDefined();
+    expect(pop!.t).toBeGreaterThanOrEqual(0.13);
+    expect(pop!.t).toBeLessThan(4); // still inside scene 1
     expect(e.some((x) => x.sound === 'swipe' && Math.abs(x.t - 4.2) < 1e-9)).toBe(true); // art in scene 2
     expect(e.every((x) => x.t < 15)).toBe(true);
     expect([...e].sort((a, b) => a.t - b.t)).toEqual(e);

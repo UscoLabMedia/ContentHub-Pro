@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { alignWords, normalizeTuning, stripMarkup, validateSlides, validateSpec, type CarouselSpec, type SceneOriginal, type Tts, type VideoSpec } from '@chp/core';
+import { alignWords, beatTimes, normalizeTuning, stripMarkup, validateSlides, validateSpec, type CarouselSpec, type SceneOriginal, type Tts, type VideoSpec } from '@chp/core';
 import { buildSfxTrack, type SfxHook } from './sfx.ts';
 
 export interface RenderJob {
@@ -227,6 +227,8 @@ async function run(job: RenderJob, input: VideoSpec, quality: 'draft' | 'final',
     if (narration) {
       spec = (await narrateScenes(input, narration, (p) => (job.progress = 1 + Math.round(p * 14)))).spec;
     }
+    // key words → seconds, from the final timeline (the narration has already stretched the scenes); the picture and the sound effects share them
+    spec = { ...spec, scenes: spec.scenes.map((sc) => (sc.beatWords?.length && !sc.card ? { ...sc, beats: beatTimes(sc, sc.beatWords) } : sc)) };
     if (extras?.sfx) {
       job.label = 'Preparando efectos de sonido';
       const hash = await buildSfxTrack(dataDir, spec.scenes, spec.style as never, extras.sfx.config);
