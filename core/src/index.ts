@@ -18,6 +18,7 @@ export * from './subtitles.ts';
 export * from './captions.ts';
 export * from './freesearch.ts';
 export * from './illustrations.ts';
+export * from './imagegen.ts';
 export * from './music.ts';
 export * from './broll.ts';
 export * from './sfx.ts';

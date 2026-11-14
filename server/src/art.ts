@@ -82,4 +82,12 @@ export async function saveDrawn(dataDir: string, svg: string, title: string): Pr
   return ref;
 }
 
+/** An image made by the local engine: always labelled as AI-made (it goes on the closing credits). */
+export async function saveGenerated(dataDir: string, png: Uint8Array, title: string): Promise<ArtRef> {
+  const ref: ArtRef = { id: createHash('sha1').update(png).digest('hex').slice(0, 16), kind: 'image', ext: 'png', title: title.slice(0, 80) || 'Imagen', origin: 'gen', credit: 'Imagen generada con IA' };
+  await mkdir(artDir(dataDir), { recursive: true });
+  await writeFile(artPath(dataDir, ref), png);
+  return ref;
+}
+
 export const artUrl = (port: number, token: string, ref: Pick<ArtRef, 'id' | 'ext'>): string => `http://127.0.0.1:${port}/api/art/${ref.id}.${ref.ext}?s=${token}`;

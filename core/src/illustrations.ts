@@ -34,7 +34,7 @@ export interface ArtRef {
   kind: 'image' | 'svg';
   ext: 'png' | 'jpg' | 'webp' | 'svg';
   title: string;
-  origin: 'web' | 'ai';
+  origin: 'web' | 'ai' | 'gen';
   /** Ready-to-print credit line; empty when none is required (public domain, CC0, own drawing). */
   credit: string;
 }
