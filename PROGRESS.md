@@ -29,7 +29,7 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 ## Pendiente
 
-- Música y efectos (siguiente fase acordada): pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX; catálogo curado + archivos propios. Preguntar diseño antes.
+- Música y efectos (SIGUIENTE; diseño decidido, rama nueva `feat/music-sfx`): música desde Openverse (incluye pistas de Free Music Archive; solo CC0/CC BY, con crédito en pantalla final y descripción) + YouTube Audio Library subida a mano (no tiene API; guardar atribución por pista y avisar que sus términos varían) + archivos propios. Elección por ánimo y tema con la consulta de IA del guion, la app propone 3 pistas para escuchar y el usuario elige. Mezcla: ducking bajo la voz, ajuste a la duración (corte con fade o repetición sin salto) y fundido de entrada/salida. Efectos: whoosh en cambios de escena, pop/clic con número gigante y palabra resaltada, y ambientes sutiles según el tema. Idea: sintetizar whoosh/pop/clic localmente con ffmpeg (sin licencias ni descargas); ambientes por búsqueda libre o sintetizados. Verificar qué filtros trae el ffmpeg de Remotion.
 - Ilustraciones: probar búsqueda real en Openverse/Commons (sin red en la sesión; solo probado con fixture local).
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
 - Voz en línea (JorgeNeural) con tiempos por palabra para mejor karaoke; revisar la librería con el usuario.
