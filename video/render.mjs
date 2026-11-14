@@ -7,13 +7,14 @@ import { dirname, join, resolve } from 'node:path';
 import { PRESETS, renderScale } from '@chp/core/presets';
 
 const [specPath, quality = 'draft', outArg, frameArg = '30'] = process.argv.slice(2);
-if (!specPath || !['draft', 'final', 'still', 'frame'].includes(quality)) {
-  console.error('Usage: render <spec.json> [draft|final|still|frame] [out] [frameNumber]');
+if (!specPath || !['draft', 'final', 'still', 'frame', 'carousel', 'cslide'].includes(quality)) {
+  console.error('Usage: render <spec.json> [draft|final|still|frame|carousel|cslide] [out] [frameNumber]');
   process.exit(1);
 }
 const spec = JSON.parse(readFileSync(specPath, 'utf8'));
-const preset = quality === 'still' ? null : PRESETS[spec.preset];
-if (quality !== 'still' && !preset) {
+const imageOnly = ['still', 'carousel', 'cslide'].includes(quality);
+const preset = imageOnly ? null : PRESETS[spec.preset];
+if (!imageOnly && !preset) {
   console.error(`Unknown preset "${spec.preset}". Valid: ${Object.keys(PRESETS).join(', ')}`);
   process.exit(1);
 }
@@ -23,7 +24,11 @@ const out = resolve(outArg ?? `out/${spec.preset}-${quality}.mp4`);
 const cli = join(dirname(createRequire(import.meta.url).resolve('@remotion/cli')), '..', 'remotion-cli.js');
 // quality "still" renders the Thumbnail composition to a PNG (props = { title, subtitle, theme }).
 // quality "frame" renders one frame of the video (a style preview) as a small PNG.
+// quality "carousel" renders every slide of the Carousel composition as a PNG sequence into the folder `out` (one pass).
+// quality "cslide" renders a single slide (frame number = slide index) as a PNG.
 const args = quality === 'still' ? [cli, 'still', 'src/index.ts', 'Thumbnail', out, `--props=${resolve(specPath)}`, '--image-format=png']
+  : quality === 'carousel' ? [cli, 'render', 'src/index.ts', 'Carousel', out, `--props=${resolve(specPath)}`, '--sequence', '--image-format=png']
+  : quality === 'cslide' ? [cli, 'still', 'src/index.ts', 'Carousel', out, `--props=${resolve(specPath)}`, `--frame=${Math.max(0, Number(frameArg) || 0)}`, '--scale=0.5', '--image-format=png']
   : quality === 'frame' ? [cli, 'still', 'src/index.ts', 'Piece', out, `--props=${resolve(specPath)}`, `--frame=${Number(frameArg) || 30}`, '--scale=0.5', '--image-format=png'] : [
   cli, 'render', 'src/index.ts', 'Piece', out,
   `--props=${resolve(specPath)}`,

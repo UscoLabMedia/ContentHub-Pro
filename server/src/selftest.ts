@@ -6,10 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
-  SAMPLE_TEXT, Vault, claudeCodeStatus, createClaudeCodeClient, fetchRadar, piperAssetUrl, pdfToText,
+  SAMPLE_TEXT, Vault, claudeCodeStatus, toSlideSpecs, createClaudeCodeClient, fetchRadar, piperAssetUrl, pdfToText,
   run, runFfmpeg, toWav16k, transcribe, wavInfo, type BlobStorage, type Tts,
 } from '@chp/core';
-import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
+import { renderCarousel, renderFile, renderStatus, renderStill, startRender } from './render.ts';
 import { checkSource } from './verify.ts';
 import { edgeProvider } from './voice-online.ts';
 import { KokoroEngine } from './kokoro.ts';
@@ -203,6 +203,22 @@ export const CHECKS: Check[] = [
     const size = (await stat(out)).size;
     await rm(out, { force: true });
     return `PNG generado (${Math.round(size / 1024)} KB)`;
+  } },
+  { id: 'carousel', label: 'Carrusel de Instagram (láminas 1080×1350)', group: 'Video', run: async (c) => {
+    if (!c.full) throw new Skip('Solo en la prueba completa');
+    const dir = join(c.dataDir, 'selftest-carousel');
+    await rm(dir, { recursive: true, force: true });
+    await mkdir(dir, { recursive: true });
+    try {
+      const slides = toSlideSpecs([{ text: 'Prueba del carrusel' }, { text: 'Una lámina de contenido' }, { text: 'Guarda y comparte' }]);
+      const names = await renderCarousel({ slides, theme: { bg: '#0f172a', fg: '#f8fafc', accent: '#6366f1' } }, dir, 'prueba', c.dataDir, c.root);
+      const png = await readFile(join(dir, names[0]!));
+      const w = png.readUInt32BE(16), h = png.readUInt32BE(20);
+      if (names.length !== 3 || w !== 1080 || h !== 1350) throw new Error(`Se esperaban 3 láminas de 1080×1350 y salieron ${names.length} de ${w}×${h}`);
+      return `${names.length} láminas PNG de ${w}×${h}`;
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   } },
   { id: 'sapi', label: 'Voz: voces de Windows (sin descarga)', group: 'Voz', run: async (c) => {
     if (process.platform !== 'win32') throw new Skip('Solo existe en Windows');

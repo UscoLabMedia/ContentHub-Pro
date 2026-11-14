@@ -7,14 +7,14 @@ import { musicGain, normalizeMix, speechWindows } from '@chp/core/music';
 import { captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
 import { Art, Background, Broll, Hero, Karaoke, Motif, Particles, camTransform, camera } from './visual.tsx';
 
-const styleOf = (spec: VideoSpec): StyleProfile => {
+export const styleOf = (spec: { style?: unknown; theme?: VideoSpec['theme'] }): StyleProfile => {
   if (spec.style) return spec.style as StyleProfile;
   const t = spec.theme;
   return t ? { ...DEFAULT_STYLE, palette: { bg: t.bg, fg: t.fg, accent: t.accent, accent2: t.accent } } : DEFAULT_STYLE;
 };
 
 /** Closing "Fuentes" card: title line + one source per line, left aligned and calm. */
-const Card = ({ text, style }: { text: string; style: StyleProfile }) => {
+export const Card = ({ text, style }: { text: string; style: StyleProfile }) => {
   const { width, height } = useVideoConfig();
   const [title, ...lines] = text.split('\n');
   const size = width * (height > width ? 0.05 : 0.026);
@@ -64,7 +64,7 @@ const Scene = ({ scene, index, style }: { scene: VideoSpec['scenes'][number]; in
 };
 
 /** Waits until the subtitle font (bundled or uploaded by the person) is ready before any frame is drawn. */
-const useSubtitleFonts = (style: StyleProfile, fonts: VideoSpec['fonts']) => {
+export const useSubtitleFonts = (style: StyleProfile, fonts: VideoSpec['fonts']) => {
   const [handle] = useState(() => delayRender('subtitle fonts'));
   useEffect(() => {
     const cap = captionsOf(style);

@@ -29,6 +29,8 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 | #18 | `feat/voice-cloning` | Clonar una voz (OpenVoice v2 ONNX vía voiceclonnx), consentimiento obligatorio, muestra cifrada, aviso de voz sintética | fusionado |
 
+| #20 | `feat/carousel` | Carrusel de Instagram 4:5 (1080×1350): láminas desde las escenas, editor, PNG numerados + .zip + pie sugerido | en revisión |
+
 ## Decisiones tomadas (no volver a preguntar)
 
 - Voz: local gratis + opción en línea después. Audio de revisión: cifrado y temporal.
@@ -48,11 +50,9 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
 - Voces en línea: probado solo con proveedores simulados y un servidor de prueba de Azure; faltan pruebas reales con Edge y con una clave de Azure. Azure REST no da tiempos por palabra (se usa la estimación).
 - Clonación de voz: solo probada con un convertidor simulado y la instalación real (venv + voiceclonnx 0.0.3a3, alfa de un autor pequeño); los modelos viven en Hugging Face, inaccesible desde la sesión, así que la conversión real y su calidad están sin probar. voiceclonnx fuerza CPU (no usa GPU). Chatterbox descartado (retirado por su autor en ago 2026).
-- CARRUSEL DE INSTAGRAM (SIGUIENTE; rama `feat/carousel` creada desde `main`, aún sin código; diseño decidido):
-  - Láminas desde las escenas del guion (local, sin IA): la primera es portada con el gancho, la última cierre con llamada a la acción; se pueden editar, reordenar y quitar. Si hay fuentes o créditos CC BY, se añade una lámina final de «Fuentes».
-  - Cada lámina lleva: el estilo del usuario (colores, fondo, tipografía de subtítulos), la ilustración o un cuadro del B-roll de esa escena si existe, y numeración 1/N con flecha para deslizar. NO lleva número gigante (no lo eligió).
-  - Entrega: solo Instagram 4:5 (1080×1350) en PNG numerados, descargables uno a uno o en un .zip (zip sin compresión escrito a mano con zlib.crc32). Opcional más adelante: 1:1, 9:16 y PDF (no elegidos).
-  - Plan técnico: composición Remotion `Carousel` con calculateMetadata (un fotograma por lámina) renderizada como secuencia de PNG en una sola pasada (`--sequence`), modo `carousel` en `video/render.mjs`; exportar el hook de fuentes de `Piece.tsx`; entregable `carousel` en `core/src/deliverables.ts` y `server/src/deliverables.ts`; módulo `core/src/carousel.ts` (slidesFromScenes, reparto de textos largos ≤160 caracteres, máx. 20 láminas); la verificación documental (gate) se aplica al texto de cada lámina (un texto editado sin verificar con cifras queda pendiente); en `Deliverables.tsx` no exigir borrador aprobado si solo se marcan entregables sin video (carrusel, miniatura, descripción); texto con créditos y pie sugerido en un .md; vista previa de una lámina.
+- CARRUSEL DE INSTAGRAM: HECHO en `feat/carousel` (pendiente de revisión/fusión). Láminas locales desde las escenas (portada = gancho, cierre = llamada a la acción, textos largos divididos a ≤160 caracteres, máx. 20; lámina final de «Fuentes» si hay créditos), editables/reordenables/quitables en el paso 9 con vista previa por lámina; estilo del usuario + ilustración o cuadro del B-roll de la escena; numeración 1/N y flecha; sin número gigante. Entrega: PNG numerados + .zip (sin compresión, `core/src/zip.ts`) + `-pie.md` con créditos. Código: `core/src/carousel.ts`, composición `video/src/Carousel.tsx` (un fotograma por lámina, `--sequence`), modo `carousel`/`cslide` en `video/render.mjs`, `server/src/render.ts` (`renderCarousel`), entregable `carousel`, check `carousel` en «Probar todo». La verificación documental se aplica por lámina (`carouselGate`: un texto editado o dividido con cifras sin verificar queda pendiente). El paso 9 ya no exige borrador aprobado si solo se marcan carrusel, miniatura o descripción.
+  - Sin probar: lámina con cuadro de B-roll real (solo ilustración con SVG de prueba), el check «Probar todo» completo en el PC del usuario y la interfaz del editor en navegador (typecheck y tests sí pasan).
+  - Opcional más adelante (no elegido): 1:1, 9:16 y PDF.
 - Otros pendientes menores: cortes de clips del podcast (paso 1: archivos propios), publicación automática (cada plataforma exige credenciales propias).
 
 ## Límites conocidos / sin verificar

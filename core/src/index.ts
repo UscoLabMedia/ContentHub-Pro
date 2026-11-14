@@ -4,6 +4,8 @@ export * from './schemas.ts';
 export * from './presets.ts';
 export * from './production.ts';
 export * from './deliverables.ts';
+export * from './carousel.ts';
+export * from './zip.ts';
 export * from './verification.ts';
 export * from './style.ts';
 export * from './motion.ts';

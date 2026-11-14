@@ -2,10 +2,10 @@
 // On Windows the first render downloads a headless browser automatically (needs internet once).
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { alignWords, normalizeTuning, stripMarkup, validateSpec, type Tts, type VideoSpec } from '@chp/core';
+import { alignWords, normalizeTuning, stripMarkup, validateSlides, validateSpec, type CarouselSpec, type Tts, type VideoSpec } from '@chp/core';
 import { buildSfxTrack, type SfxHook } from './sfx.ts';
 
 export interface RenderJob {
@@ -111,6 +111,54 @@ export async function renderStill(props: StillProps, outFile: string, dataDir: s
   } finally {
     await rm(propsPath, { force: true });
   }
+}
+
+/** Runs video/render.mjs in a given mode with a props JSON; the props file is always removed (it may hold a session token). */
+async function runRenderScript(props: unknown, args: string[], check: () => boolean, dataDir: string, root: string): Promise<void> {
+  await mkdir(join(dataDir, 'renders'), { recursive: true });
+  const propsPath = join(dataDir, 'renders', `${randomBytes(6).toString('hex')}.json`);
+  await writeFile(propsPath, JSON.stringify(props));
+  const tsx = join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const c = spawn(process.execPath, [tsx, 'render.mjs', propsPath, ...args], { cwd: join(root, 'video'), windowsHide: true });
+      let log = '';
+      c.stdout.on('data', (d) => (log = (log + d).slice(-1500)));
+      c.stderr.on('data', (d) => (log = (log + d).slice(-1500)));
+      c.on('error', reject);
+      c.on('close', (code) => (code === 0 && check() ? resolve() : reject(new Error(friendly(log)))));
+    });
+  } finally {
+    await rm(propsPath, { force: true });
+  }
+}
+
+/** Renders every slide of the carousel (1080×1350) as PNGs named `<prefix>-01.png`… inside `outDir`. Returns the file names in order. */
+export async function renderCarousel(spec: CarouselSpec, outDir: string, prefix: string, dataDir: string, root: string): Promise<string[]> {
+  const bad = validateSlides(spec.slides.filter((s) => s.role !== 'sources'), spec.slides.some((s) => s.role === 'sources') ? 1 : 0);
+  if (bad) throw new Error(bad);
+  const seq = join(outDir, 'seq-tmp');
+  await rm(seq, { recursive: true, force: true });
+  try {
+    await runRenderScript(spec, ['carousel', seq], () => existsSync(seq), dataDir, root);
+    const files = (await readdir(seq)).filter((f) => /\.png$/i.test(f)).sort((a, b) => Number(a.match(/(\d+)/)?.[1]) - Number(b.match(/(\d+)/)?.[1]));
+    if (files.length !== spec.slides.length) throw new Error(`El render produjo ${files.length} imágenes y se esperaban ${spec.slides.length}`);
+    const pad = Math.max(2, String(files.length).length);
+    const names: string[] = [];
+    for (const [i, f] of files.entries()) {
+      const name = `${prefix}-${String(i + 1).padStart(pad, '0')}.png`;
+      await rename(join(seq, f), join(outDir, name));
+      names.push(name);
+    }
+    return names;
+  } finally {
+    await rm(seq, { recursive: true, force: true });
+  }
+}
+
+/** One slide as a half-size PNG (preview in the app). */
+export async function renderCarouselSlide(spec: CarouselSpec, index: number, outFile: string, dataDir: string, root: string): Promise<void> {
+  await runRenderScript(spec, ['cslide', outFile, String(index)], () => existsSync(outFile), dataDir, root);
 }
 
 let frameQueue: Promise<unknown> = Promise.resolve();

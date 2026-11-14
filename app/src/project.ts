@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PLATFORM_PRESET, toSpec, type Scene } from '@chp/core/production';
 import type { DeliverableId, ShortRange } from '@chp/core/deliverables';
+import type { SlideDraft } from '@chp/core/carousel';
 import { textKey, type SceneCheck } from '@chp/core/verification';
 import type { ArtRef } from '@chp/core/illustrations';
 import type { BrollRef } from '@chp/core/broll';
@@ -38,6 +39,8 @@ export interface Project {
   deliverables: {
     selected: DeliverableId[];
     shorts: ShortRange[] | null;
+    /** Instagram carousel slides as edited; null (or missing in older projects) = built from the scenes. */
+    slides?: SlideDraft[] | null;
     thumbTitle: string;
     summary: string;
     result: { key: string; items: { id: DeliverableId; label: string; status: string; error?: string; files: { name: string; url: string; kind: string }[] }[] } | null;
@@ -67,7 +70,7 @@ export const EMPTY_PROJECT: Project = {
   production: { preset: '', themeIdx: 0, scenes: [], style: DEFAULT_STYLE },
   renders: { draft: null, draftApproved: false, final: null },
   publish: { copy: null, posted: [] },
-  deliverables: { selected: ['long', 'shorts', 'thumbnail', 'description'], shorts: null, thumbTitle: '', summary: '', result: null },
+  deliverables: { selected: ['long', 'shorts', 'thumbnail', 'description'], shorts: null, slides: null, thumbTitle: '', summary: '', result: null },
 };
 
 export const defaultPreset = (p: Project): string => PLATFORM_PRESET[(p.platforms[0] as PlatformId) ?? 'tiktok'] ?? 'tiktok';

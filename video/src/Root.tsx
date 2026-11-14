@@ -3,6 +3,13 @@ import { PRESETS } from '@chp/core/presets';
 import type { VideoSpec } from '@chp/core/schemas';
 import { Piece } from './Piece.tsx';
 import { Thumbnail, type ThumbnailProps } from './Thumbnail.tsx';
+import { CAROUSEL_H, CAROUSEL_W, type CarouselSpec } from '@chp/core/carousel';
+import { Carousel } from './Carousel.tsx';
+
+const carouselDefaults: CarouselSpec = {
+  slides: [{ role: 'cover', text: '¿Sabías que…?' }, { role: 'cta', text: 'Guarda y comparte' }],
+  theme: { bg: '#0f172a', fg: '#f8fafc', accent: '#6366f1' },
+};
 
 const defaultProps: VideoSpec = {
   preset: 'tiktok',
@@ -19,6 +26,16 @@ const thumbDefaults: ThumbnailProps = { title: '¿Cómo funciona?', theme: { bg:
 export const Root = () => (
   <>
   <Composition id="Thumbnail" component={Thumbnail} width={1280} height={720} fps={30} durationInFrames={1} defaultProps={thumbDefaults} />
+  <Composition
+    id="Carousel"
+    component={Carousel}
+    width={CAROUSEL_W}
+    height={CAROUSEL_H}
+    fps={30}
+    durationInFrames={2}
+    defaultProps={carouselDefaults}
+    calculateMetadata={({ props }) => ({ durationInFrames: Math.max(1, props.slides.length) })}
+  />
   <Composition
     id="Piece"
     component={Piece}

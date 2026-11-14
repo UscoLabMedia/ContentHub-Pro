@@ -1,12 +1,12 @@
 // "Entregables": the person ticks what to produce; everything is built locally (no AI tokens).
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import {
-  DELIVERABLES, buildDescription, chaptersFrom, runFfmpeg, scenesToSrt, slug, stripMarkup, validateShorts,
-  type DeliverableId, type Scene, type ShortRange, type VideoSpec,
+  DELIVERABLES, buildCarouselCaption, buildDescription, chaptersFrom, runFfmpeg, scenesToSrt, slug, stripMarkup, validateShorts, validateSlides, zipStore,
+  type DeliverableId, type Scene, type ShortRange, type SlideSpec, type VideoSpec,
 } from '@chp/core';
-import { narrateScenes, renderStill, startRender, waitForRender, type Narration, type RenderExtras } from './render.ts';
+import { narrateScenes, renderCarousel, renderStill, startRender, waitForRender, type Narration, type RenderExtras } from './render.ts';
 
 export interface PackageRequest {
   items: DeliverableId[];
@@ -18,6 +18,8 @@ export interface PackageRequest {
   /** Background music with its mix (URL served by this server). */
   music?: VideoSpec['music'];
   shorts: ShortRange[];
+  /** Carousel slides with their art/B-roll already resolved by the server (the last one may be the "Fuentes" slide). */
+  slides?: SlideSpec[];
   title: string;
   subtitle?: string;
   summary: string;
@@ -32,7 +34,7 @@ export interface PackageRequest {
 export interface PackageFile {
   name: string;
   url: string;
-  kind: 'video' | 'image' | 'audio' | 'text';
+  kind: 'video' | 'image' | 'audio' | 'text' | 'archive';
 }
 export interface PackageItem {
   id: DeliverableId;
@@ -53,7 +55,7 @@ export const getPackage = (id: string) => jobs.get(id) ?? null;
 export const isPackageId = (s: string) => /^[a-f0-9]{16}$/.test(s);
 export const packageDir = (dataDir: string, id: string) => join(dataDir, 'deliverables', id);
 
-const ORDER: DeliverableId[] = ['long', 'shorts', 'thumbnail', 'description', 'voice', 'subtitles'];
+const ORDER: DeliverableId[] = ['long', 'shorts', 'carousel', 'thumbnail', 'description', 'voice', 'subtitles'];
 const THEME = { bg: '#0f172a', fg: '#f8fafc', accent: '#6366f1' };
 
 export function validatePackage(r: PackageRequest, hasVoice: boolean): string | null {
@@ -62,6 +64,11 @@ export function validatePackage(r: PackageRequest, hasVoice: boolean): string | 
   if (r.items.includes('voice') && !hasVoice) return 'La voz sola necesita una voz elegida en el paso 6';
   if (r.items.includes('shorts')) {
     const bad = validateShorts(r.scenes, r.shorts);
+    if (bad) return bad;
+  }
+  if (r.items.includes('carousel')) {
+    const content = (r.slides ?? []).filter((x) => x.role !== 'sources');
+    const bad = validateSlides(content, (r.slides ?? []).length - content.length);
     if (bad) return bad;
   }
   if (r.items.includes('thumbnail') && !r.title.trim()) return 'La miniatura necesita un título';
@@ -121,6 +128,15 @@ async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: strin
         for (const [i, r] of req.shorts.entries()) {
           await video(item, { preset: 'youtube_short', scenes: withCard(req.scenes.slice(r.from, r.to + 1)), theme, style: req.style, fonts: req.fonts, music: req.music }, `${base}-short-${i + 1}.mp4`, [(i / req.shorts.length) * 100, ((i + 1) / req.shorts.length) * 100]);
         }
+      }
+      if (item.id === 'carousel') {
+        const prefix = `${base}-carrusel`;
+        const names = await renderCarousel({ slides: req.slides!, theme, style: req.style, fonts: req.fonts }, dir, prefix, o.dataDir, o.root);
+        for (const name of names) item.files.push({ name, url: `/api/deliverable/${job.id}/${name}?dl=1`, kind: 'image' });
+        const zipName = `${prefix}.zip`;
+        await writeFile(join(dir, zipName), zipStore(await Promise.all(names.map(async (name) => ({ name, data: await readFile(join(dir, name)) })))));
+        item.files.push({ name: zipName, url: `/api/deliverable/${job.id}/${zipName}?dl=1`, kind: 'archive' });
+        await textFile(item, `${prefix}-pie.md`, buildCarouselCaption({ title: req.title, summary: req.summary, hashtags: req.hashtags, credits: [...(req.extra ?? []), ...req.sources.map((x) => `- ${x.source}${x.url ? ` — ${x.url}` : ''}`)] }), 'text');
       }
       if (item.id === 'thumbnail') {
         const name = `${base}-miniatura.png`;
