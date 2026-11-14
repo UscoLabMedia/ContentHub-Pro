@@ -11,7 +11,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
   Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
-  OUTPUT_SCHEMAS, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
+  OUTPUT_SCHEMAS, slug, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderCarouselSlide, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
@@ -77,7 +77,7 @@ const verifyJobs = new Map<string, VerifyJob>();
 const sheets = new Map<string, Buffer>();
 const capSheets = new Map<string, Buffer>();
 /** Verification checks the person has saved in the project (keyed by scene text). */
-const projectChecks = (s: { vault: Vault }): Record<string, SceneCheck> => s.vault.get<{ verification?: Record<string, SceneCheck> }>('project')?.verification ?? {};
+const projectChecks = (s: { vault: Vault }): Record<string, SceneCheck> => (currentData(s.vault) as { verification?: Record<string, SceneCheck> } | undefined)?.verification ?? {};
 /** Illustrations the person chose, keyed by scene text (saved in the project). */
 /** Fonts the person uploaded (encrypted on disk; metadata in the vault). */
 interface FontRec { id: string; name: string; ext: 'ttf' | 'otf' | 'woff' | 'woff2' }
@@ -99,7 +99,7 @@ const userFontsFor = (style: { captions?: { font: string } } | undefined, s: { v
   const rec = m ? fontsOf(s).find((x) => x.id === m[1]) : undefined;
   return rec && existsSync(fontFile(rec.id)) ? [{ family: `user-${rec.id}`, url: `http://127.0.0.1:${PORT}/api/font/${rec.id}?s=${s.token}` }] : undefined;
 };
-const projectArt = (s: { vault: Vault }): Record<string, ArtRef> => s.vault.get<{ art?: Record<string, ArtRef> }>('project')?.art ?? {};
+const projectArt = (s: { vault: Vault }): Record<string, ArtRef> => (currentData(s.vault) as { art?: Record<string, ArtRef> } | undefined)?.art ?? {};
 /** Adds each scene's illustration URL (served by this server, only to the local render). Client-sent art is never trusted. */
 const withArt = <T extends { text: string; durationSec: number }>(scenes: T[], s: { vault: Vault; token: string }): (T & { art?: { url: string; kind: 'image' | 'svg' } })[] => {
   const art = projectArt(s);
@@ -110,11 +110,11 @@ const withArt = <T extends { text: string; durationSec: number }>(scenes: T[], s
 };
 /** The sound-effects plan saved in the project (null when switched off). */
 const sfxFor = (s: { vault: Vault; token: string }): { config: ReturnType<typeof normalizeSfx>; url: (hash: string) => string } | undefined => {
-  const config = normalizeSfx(s.vault.get<{ sfx?: Partial<ReturnType<typeof normalizeSfx>> }>('project')?.sfx);
+  const config = normalizeSfx((currentData(s.vault) as { sfx?: Partial<ReturnType<typeof normalizeSfx>> } | undefined)?.sfx);
   return config.enabled ? { config, url: (hash) => `http://127.0.0.1:${PORT}/api/sfx/${hash}.wav?s=${s.token}` } : undefined;
 };
 /** B-roll chosen per scene wording (saved in the project) and the free API keys (write-only, kept in the vault). */
-const projectBroll = (s: { vault: Vault }): Record<string, BrollRef> => s.vault.get<{ broll?: Record<string, BrollRef> }>('project')?.broll ?? {};
+const projectBroll = (s: { vault: Vault }): Record<string, BrollRef> => (currentData(s.vault) as { broll?: Record<string, BrollRef> } | undefined)?.broll ?? {};
 const brollKeys = (s: { vault: Vault }): BrollKeys => s.vault.get<BrollKeys>('brollKeys') ?? {};
 /** Adds each scene's B-roll URL (served by this server to the local render only). */
 const withBroll = <T extends { text: string; durationSec: number }>(scenes: T[], s: { vault: Vault; token: string }): (T & { broll?: { url: string; durationSec: number } })[] => {
@@ -125,7 +125,7 @@ const withBroll = <T extends { text: string; durationSec: number }>(scenes: T[],
   });
 };
 /** Background music chosen in the project (a track + its mix). */
-const projectMusic = (s: { vault: Vault }): { track: MusicRef | null; mix?: Partial<MusicMix> } => s.vault.get<{ music?: { track: MusicRef | null; mix?: Partial<MusicMix> } }>('project')?.music ?? { track: null };
+const projectMusic = (s: { vault: Vault }): { track: MusicRef | null; mix?: Partial<MusicMix> } => (currentData(s.vault) as { music?: { track: MusicRef | null; mix?: Partial<MusicMix> } } | undefined)?.music ?? { track: null };
 const musicFor = (s: { vault: Vault; token: string }): { url: string } & MusicMix | undefined => {
   const m = projectMusic(s);
   return m.track && musicExists(DATA_DIR, m.track.id) ? { url: musicUrl(PORT, s.token, m.track.id), ...normalizeMix(m.mix) } : undefined;
@@ -137,6 +137,20 @@ const parseSlides = (raw: unknown, fallback: { text: string }[]): SlideDraft[] =
 const slideMedia = (drafts: SlideDraft[], s: { vault: Vault; token: string }, sourcesText?: string): SlideSpec[] =>
   toSlideSpecs(withBroll(withArt(drafts.map((d) => ({ text: d.origin ?? d.text, durationSec: 3, slideText: d.text })), s), s).map((x) => ({ text: x.slideText, art: x.art, broll: x.broll })), sourcesText);
 const pendingMessage = (n: number) => `Hay ${n} escena(s) sin verificar. Verifica sus fuentes o márcalas como opinión en el paso de producción.`;
+/** Removes from disk the files only a deleted project used (illustrations, B-roll, music, renders, delivered packages). */
+const removeFiles = async (o: FileRefs): Promise<void> => {
+  // The ids come from project data the browser saved: only well-formed ids and known extensions ever reach the disk.
+  const hex = (i: string) => /^[a-f0-9]{16}$/.test(i);
+  const ext = (e: string): e is 'svg' | 'png' | 'jpg' | 'webp' => ['svg', 'png', 'jpg', 'webp'].includes(e);
+  const gone = [
+    ...o.art.flatMap((a) => (hex(a.id) && ext(a.ext) ? [artPath(DATA_DIR, { id: a.id, ext: a.ext })] : [])),
+    ...o.broll.filter(hex).map((i) => brollPath(DATA_DIR, i)),
+    ...o.music.filter(hex).map((i) => musicPath(DATA_DIR, i)),
+    ...o.renders.filter(hex).map((i) => renderFile(DATA_DIR, i)),
+  ];
+  await Promise.all(gone.map((f) => removeFile(f, { force: true }).catch(() => {})));
+  await Promise.all(o.packages.filter(hex).map((i) => removeFile(packageDir(DATA_DIR, i), { recursive: true, force: true }).catch(() => {})));
+};
 const selftest: { running: boolean; full: boolean; results: CheckResult[] } = { running: false, full: false, results: [] };
 
 type Engine = 'claude-code' | 'api';
@@ -289,7 +303,7 @@ const tokenOk = (t: string): boolean => !!session && t.length === session.token.
 const server = createServer(async (req, res) => {
   res.setHeader('access-control-allow-origin', ORIGIN);
   res.setHeader('access-control-allow-headers', 'content-type,x-session');
-  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') return void res.writeHead(204).end();
   const url = new URL(req.url ?? '/', 'http://localhost');
   if (!url.pathname.startsWith('/api/')) {
@@ -917,11 +931,76 @@ const server = createServer(async (req, res) => {
     }
 
     // --- project, AI tasks, metrics ---
-    if (url.pathname === '/api/project' && req.method === 'GET') return json(res, 200, { project: s.vault.get('project') ?? null });
+    if (url.pathname === '/api/project' && req.method === 'GET') return json(res, 200, { id: currentId(s.vault), project: currentData(s.vault) ?? null });
     if (url.pathname === '/api/project' && req.method === 'PUT') {
-      s.vault.set('project', (await readBody(req)).project);
+      const b = await readBody(req);
+      const id = typeof b.id === 'string' ? b.id : currentId(s.vault);
+      if (!saveProjectData(s.vault, id, b.project ?? {})) return json(res, 404, { error: 'El proyecto ya no existe' });
       await s.vault.save();
       return json(res, 200, { ok: true });
+    }
+
+    // --- project manager: several projects in the same vault ---
+    if (url.pathname === '/api/projects' && req.method === 'GET') return json(res, 200, listProjects(s.vault));
+    if (url.pathname === '/api/projects' && req.method === 'POST') {
+      const b = await readBody(req);
+      try {
+        const m = createProject(s.vault, String(b.name ?? ''), typeof b.template === 'string' && b.template ? b.template : undefined);
+        await s.vault.save();
+        return json(res, 200, m);
+      } catch (e) {
+        return json(res, 400, { error: e instanceof Error ? e.message : 'No se pudo crear el proyecto' });
+      }
+    }
+    if (url.pathname === '/api/projects/import' && req.method === 'POST') {
+      try {
+        const m = importProject(s.vault, String((await readBody(req)).json ?? ''));
+        await s.vault.save();
+        return json(res, 200, m);
+      } catch (e) {
+        return json(res, 400, { error: e instanceof Error ? e.message : 'No se pudo importar el proyecto' });
+      }
+    }
+    const prj = url.pathname.match(/^\/api\/projects\/([a-f0-9]{16})(?:\/(open|duplicate|export))?$/);
+    if (prj) {
+      const id = prj[1]!;
+      const action = prj[2];
+      const meta = listProjects(s.vault).items.find((p) => p.id === id);
+      if (!meta || !isProjectId(id)) return json(res, 404, { error: 'El proyecto ya no existe' });
+      try {
+        if (!action && req.method === 'GET') return json(res, 200, { id, project: getProjectData(s.vault, id) ?? null });
+        if (action === 'export' && req.method === 'GET') {
+          const body = Buffer.from(exportEnvelope(meta.name, getProjectData(s.vault, id) ?? {}));
+          res.writeHead(200, { 'content-type': 'application/json', 'content-disposition': `attachment; filename="${slug(meta.name)}.contenthub.json"`, 'content-length': body.length });
+          return void res.end(body);
+        }
+        if (action === 'open' && req.method === 'POST') {
+          openProject(s.vault, id);
+          await s.vault.save();
+          return json(res, 200, { current: id });
+        }
+        if (action === 'duplicate' && req.method === 'POST') {
+          const m = duplicateProject(s.vault, id, (await readBody(req)).name);
+          await s.vault.save();
+          return json(res, 200, m);
+        }
+        if (!action && req.method === 'PATCH') {
+          const b = await readBody(req);
+          if (typeof b.name === 'string') renameProject(s.vault, id, b.name);
+          if (typeof b.archived === 'boolean') archiveProject(s.vault, id, b.archived);
+          await s.vault.save();
+          return json(res, 200, { ok: true });
+        }
+        if (!action && req.method === 'DELETE') {
+          if (cleanName((await readBody(req)).confirm) !== meta.name) return json(res, 400, { error: 'Escribe el nombre exacto del proyecto para confirmar' });
+          const r = deleteProject(s.vault, id);
+          await s.vault.save();
+          await removeFiles(r.orphans);
+          return json(res, 200, { current: r.current });
+        }
+      } catch (e) {
+        return json(res, 400, { error: e instanceof Error ? e.message : 'No se pudo completar la acción' });
+      }
     }
     if (url.pathname.startsWith('/api/ai/') && req.method === 'POST') {
       const task = url.pathname.slice('/api/ai/'.length) as Task;

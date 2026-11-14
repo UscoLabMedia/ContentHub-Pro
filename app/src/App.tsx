@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, type EngineView } from './api.ts';
 import { STEPS, TOTAL } from './steps.ts';
-import { useProject } from './project.ts';
+import { flushProject, useProject } from './project.ts';
+import { Projects, loadProjects, type ProjectList } from './components/Projects.tsx';
 import { EditCode } from './components/EditCode.tsx';
 import { Settings } from './components/Settings.tsx';
 import { StepDeliverables } from './components/Deliverables.tsx';
@@ -18,8 +19,12 @@ interface Status {
   unlocked: boolean;
 }
 
-function Workspace() {
-  const [project, setProject] = useProject();
+function Workspace({ projectId, onHome, onSwitch }: { projectId: string; onHome: () => void; onSwitch: (id: string) => void }) {
+  const [project, setProject] = useProject(projectId);
+  const [projects, setProjects] = useState<ProjectList | null>(null);
+  useEffect(() => {
+    void loadProjects().then(setProjects).catch(() => {});
+  }, [projectId]);
   const [step, setStep] = useState(1);
   const [settings, setSettings] = useState(false);
   const [editCode, setEditCode] = useState(false);
@@ -41,7 +46,15 @@ function Workspace() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3">
-        <h1 className="font-bold">ContentHub Pro</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-bold">ContentHub Pro</h1>
+          <button onClick={onHome} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-800">Todos los proyectos</button>
+          {projects && (
+            <select aria-label="Proyecto actual" value={projectId} onChange={(e) => onSwitch(e.target.value)} className="max-w-56 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs">
+              {projects.items.filter((p) => !p.archived || p.id === projectId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-4">
           <button onClick={() => setSettings(true)} title="Motor de IA" className={`rounded-full border px-3 py-1 text-xs ${connected ? 'border-emerald-500/40 text-emerald-400' : 'border-amber-500/40 text-amber-300'}`}>
             {connected ? (engine?.engine === 'api' ? 'IA: clave de API' : 'IA: Claude Code conectado') : 'IA: sin conectar'}
@@ -83,11 +96,19 @@ function Workspace() {
 
 export function App() {
   const [state, setState] = useState<Status | null>(null);
+  const [view, setView] = useState<{ kind: 'home' } | { kind: 'work'; id: string }>({ kind: 'home' });
   useEffect(() => {
     api<Status>('/api/status').then(setState).catch(() => setState({ vaultExists: false, unlocked: false }));
   }, []);
   if (!state) return null;
   if (!state.unlocked)
     return <Unlock vaultExists={state.vaultExists} onDone={() => setState({ ...state, unlocked: true })} onVaultImported={() => setState({ ...state, vaultExists: true })} />;
-  return <Workspace />;
+  // The server keeps the "current" project (what its checks read: scene verification, art, music...), so opening one tells it.
+  const open = async (id: string) => {
+    await flushProject();
+    await api(`/api/projects/${id}/open`, { method: 'POST', json: {} });
+    setView({ kind: 'work', id });
+  };
+  if (view.kind === 'home') return <Projects onOpen={(id) => void open(id)} />;
+  return <Workspace key={view.id} projectId={view.id} onHome={() => void flushProject().then(() => setView({ kind: 'home' }))} onSwitch={(id) => void open(id)} />;
 }

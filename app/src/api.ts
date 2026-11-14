@@ -56,3 +56,13 @@ export async function downloadVault(): Promise<void> {
   Object.assign(document.createElement('a'), { href: url, download: 'contenthub-vault.enc' }).click();
   URL.revokeObjectURL(url);
 }
+
+/** Downloads one project as a file (script, scenes, style and checks; illustrations, B-roll, music and renders stay on this PC). */
+export async function downloadProject(id: string, fallbackName: string): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/export`, { headers: { 'x-session': token } });
+  if (!res.ok) throw new Error('No se pudo exportar el proyecto');
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? `${fallbackName}.contenthub.json`;
+  const url = URL.createObjectURL(await res.blob());
+  Object.assign(document.createElement('a'), { href: url, download: name }).click();
+  URL.revokeObjectURL(url);
+}

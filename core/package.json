@@ -10,6 +10,7 @@
     "./review": "./src/sources/review.ts",
     "./deliverables": "./src/deliverables.ts",
     "./carousel": "./src/carousel.ts",
+    "./projects": "./src/projects.ts",
     "./verification": "./src/verification.ts",
     "./style": "./src/style.ts",
     "./motion": "./src/motion.ts",
