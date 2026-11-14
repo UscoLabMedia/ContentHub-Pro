@@ -66,3 +66,14 @@ export const SEGMENT_MIN_SEC = 6.5;
 export function segmentCount(durationSec: number): number {
   return durationSec <= SEGMENT_MIN_SEC ? 1 : Math.max(2, Math.round(durationSec / SEGMENT_TARGET_SEC));
 }
+
+// ---------------------------------------------------------------------------- key words in the subtitles
+/**
+ * Words that stand out in the subtitles (bigger, italic, in the accent color): the ones the person marked with *asterisks*
+ * in the script and the key words chosen for the beats. Stored without accents or case; figures always stand out too.
+ */
+export function keyWordsOf(sc: { text: string; beatWords?: string[] }): string[] {
+  const marked = [...sc.text.matchAll(/\*([^*]+)\*/g)].flatMap((m) => m[1]!.split(/\s+/));
+  return [...new Set([...marked, ...(sc.beatWords ?? [])].map(norm).filter(Boolean))];
+}
+export const isKeyWord = (word: string, keys?: string[]): boolean => /\d/.test(word) || (!!keys && keys.includes(norm(word)));

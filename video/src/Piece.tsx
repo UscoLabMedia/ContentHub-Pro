@@ -67,10 +67,10 @@ const Scene = ({ scene, index, style }: { scene: VideoSpec['scenes'][number]; in
           </div>
         </>
       )}
-      {scene.art && <Art art={scene.art} style={style} frame={frame} fps={fps} width={width} height={height} hasHero={!!hero} />}
+      {scene.art && <Art art={scene.art} style={style} frame={frame} fps={fps} width={width} height={height} hasHero={!!hero} index={index} />}
       {hero && <Hero hero={hero} style={style} frame={frame} fps={fps} width={width} height={height} startFrame={heroFrame} />}
       <Particles style={style} frame={frame} index={index + 7} width={width} height={height} />
-      <Karaoke text={scene.text} style={style} frame={frame} fps={fps} speechSec={scene.speechSec} wordTimes={scene.wordTimes} durationSec={scene.durationSec} width={width} height={height} index={index} />
+      <Karaoke text={scene.text} keywords={scene.keywords} style={style} frame={frame} fps={fps} speechSec={scene.speechSec} wordTimes={scene.wordTimes} durationSec={scene.durationSec} width={width} height={height} index={index} />
     </AbsoluteFill>
   );
 };

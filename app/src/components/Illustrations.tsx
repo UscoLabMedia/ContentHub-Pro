@@ -120,6 +120,10 @@ export function Illustrations({ project, set }: P) {
     <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4" aria-label="Ilustraciones">
       <h3 className="text-sm font-semibold">Ilustraciones por escena</h3>
       <p className="text-xs text-slate-400">Primero busca imágenes libres en la web (Openverse y Wikimedia Commons; solo dominio público, CC0 y CC BY, con crédito automático). Cuesta una consulta pequeña de IA para todo el guion. Si no hay nada que sirva, puedes pedir un dibujo SVG con los colores de tu estilo.</p>
+      <label className="flex items-start gap-2 text-xs text-slate-300">
+        <input type="checkbox" className="mt-0.5" checked={style.paperCut ?? style.background === 'paper'} onChange={(e) => set({ ...project, production: { ...project.production, style: { ...style, paperCut: e.target.checked } } })} />
+        <span>Recortes de papel rasgado: cada ilustración sale como un recorte con borde irregular, sombra y grano, entra con rebote y tiembla un poco, como en los reels de collage. Viene activado en el estilo «Papel recortado».</span>
+      </label>
       <div className="flex flex-wrap items-center gap-2">
         <button className={secondary} disabled={!!busy || scenes.length === 0} onClick={() => void findAll()}>{busy === 'all' ? 'Buscando…' : 'Buscar ilustraciones'}</button>
         {Object.keys(art).length > 0 && <button className={secondary} disabled={!!busy} onClick={() => put(Object.fromEntries(Object.keys(art).map((k) => [k, null])))}>Quitar todas</button>}

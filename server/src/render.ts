@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { alignWords, beatTimes, normalizeTuning, stripMarkup, validateSlides, validateSpec, type CarouselSpec, type SceneOriginal, type Tts, type VideoSpec } from '@chp/core';
+import { alignWords, beatTimes, keyWordsOf, normalizeTuning, stripMarkup, validateSlides, validateSpec, type CarouselSpec, type SceneOriginal, type Tts, type VideoSpec } from '@chp/core';
 import { buildSfxTrack, type SfxHook } from './sfx.ts';
 
 export interface RenderJob {
@@ -221,6 +221,8 @@ export async function startRender(spec: VideoSpec, quality: 'draft' | 'final', d
 async function run(job: RenderJob, input: VideoSpec, quality: 'draft' | 'final', dataDir: string, root: string, narration?: Narration, extras?: RenderExtras): Promise<void> {
   const id = job.id;
   const fail = (e: unknown) => Object.assign(job, { status: 'error', error: e instanceof Error ? e.message : String(e) });
+  // Key words (marks *like this* and the beat words) are read before the marks are stripped from the text.
+  input = { ...input, scenes: input.scenes.map((sc) => (sc.card ? sc : { ...sc, keywords: keyWordsOf(sc) })) };
   let spec = input;
   const specPath = join(dataDir, 'renders', `${id}.json`);
   try {

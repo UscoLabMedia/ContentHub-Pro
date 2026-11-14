@@ -27,6 +27,8 @@ export interface StyleProfile {
   pace?: number;
   /** Full subtitle look (font, colors, animation...). Without it the simple `subtitle` settings apply. */
   captions?: SubtitleStyle;
+  /** Illustrations as paper cut-outs (torn edge, shadow, grain, bounce and stop-motion shake). Default: on for the paper style. */
+  paperCut?: boolean;
 }
 
 export const STYLES: StyleProfile[] = [
