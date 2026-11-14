@@ -47,3 +47,62 @@ export function sineWav(freq: number, sec: number, rate = 22050): Buffer {
   h.writeUInt32LE(data.length, 40);
   return Buffer.concat([h, data]);
 }
+
+/** PCM samples of a 16-bit WAV (mono or stereo), for joining pieces. */
+export function readPcm16(buf: Uint8Array): { rate: number; channels: number; data: Buffer } {
+  const info = wavInfo(buf);
+  if (info.bits !== 16) throw new Error('Only 16-bit WAV can be joined');
+  const b = Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+  let off = 12;
+  while (off + 8 <= b.length) {
+    const id = b.toString('ascii', off, off + 4);
+    let size = b.readUInt32LE(off + 4);
+    const body = off + 8;
+    if (id === 'data') {
+      if (size === 0 || size > b.length - body) size = b.length - body;
+      return { rate: info.sampleRate, channels: info.channels, data: b.subarray(body, body + size) };
+    }
+    off = body + size + (size % 2);
+  }
+  throw new Error('WAV has no data chunk');
+}
+
+export function wavFromPcm16(rate: number, channels: number, data: Buffer): Buffer {
+  const h = Buffer.alloc(44);
+  h.write('RIFF', 0);
+  h.writeUInt32LE(36 + data.length, 4);
+  h.write('WAVEfmt ', 8);
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(channels, 22);
+  h.writeUInt32LE(rate, 24);
+  h.writeUInt32LE(rate * 2 * channels, 28);
+  h.writeUInt16LE(2 * channels, 32);
+  h.writeUInt16LE(16, 34);
+  h.write('data', 36);
+  h.writeUInt32LE(data.length, 40);
+  return Buffer.concat([h, data]);
+}
+
+/** Joins WAV pieces (same format) with `gapsSec[i]` of silence after piece i. Also returns where each piece starts. */
+export function joinWav(parts: Uint8Array[], gapsSec: number[]): { wav: Buffer; starts: number[] } {
+  if (!parts.length) throw new Error('Nothing to join');
+  const pcm = parts.map(readPcm16);
+  const { rate, channels } = pcm[0]!;
+  if (pcm.some((p) => p.rate !== rate || p.channels !== channels)) throw new Error('The pieces have different audio formats');
+  const chunks: Buffer[] = [];
+  const starts: number[] = [];
+  let t = 0;
+  pcm.forEach((p, i) => {
+    starts.push(t);
+    chunks.push(p.data);
+    t += p.data.length / (rate * 2 * channels);
+    const gap = Math.max(0, gapsSec[i] ?? 0);
+    if (gap > 0) {
+      const frames = Math.round(gap * rate);
+      chunks.push(Buffer.alloc(frames * 2 * channels));
+      t += frames / rate;
+    }
+  });
+  return { wav: wavFromPcm16(rate, channels, Buffer.concat(chunks)), starts };
+}

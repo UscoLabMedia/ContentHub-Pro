@@ -11,6 +11,7 @@ import {
 } from '@chp/core';
 import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
 import { checkSource } from './verify.ts';
+import { edgeProvider } from './voice-online.ts';
 import { searchBroll, FONTS, SFX_LIBRARY, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
 import { existsSync } from 'node:fs';
 
@@ -166,6 +167,14 @@ export const CHECKS: Check[] = [
   { id: 'sfx', label: 'Efectos de sonido (generados en tu PC)', group: 'Video', run: async () => {
     for (const x of SFX_LIBRARY) if (synthSfx(x.id).length < 100) throw new Error(`El sonido «${x.label}» salió vacío`);
     return `${SFX_LIBRARY.length} sonidos generados correctamente`;
+  } },
+  { id: 'edge', label: 'Voz en línea: Edge (gratis, no oficial)', group: 'Voz', run: async (c) => {
+    try {
+      const r = await edgeProvider(c.dataDir).synth('es-CO-GonzaloNeural', [{ text: 'Prueba de voz.', emphasis: false, pauseAfterSec: 0 }], { speed: 1, pitch: 0, style: '' }, []);
+      return `Funciona (${Math.round(r.wav.length / 1024)} KB de audio${r.words?.length ? ', con tiempos por palabra' : ''})`;
+    } catch (e) {
+      throw new Warn(`${e instanceof Error ? e.message : 'No respondió'} Si falla, usa Azure o las voces locales.`);
+    }
   } },
   { id: 'thumbnail', label: 'Miniatura (imagen 1280×720)', group: 'Video', run: async (c) => {
     if (!c.full) throw new Skip('Solo en la prueba completa');

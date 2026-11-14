@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { validateSpec, type Tts, type VideoSpec } from '@chp/core';
+import { alignWords, normalizeTuning, stripMarkup, validateSpec, type Tts, type VideoSpec } from '@chp/core';
 import { buildSfxTrack, type SfxHook } from './sfx.ts';
 
 export interface RenderJob {
@@ -21,6 +21,9 @@ export interface Narration {
   tts: Tts;
   voiceId: string;
   speed: number;
+  /** Semitones (-6..+6) and an Azure speaking style; both optional. */
+  pitch?: number;
+  style?: string;
   /** Builds the URL the render browser uses to fetch a narration clip from this server. */
   audioUrl: (hash: string) => string;
 }
@@ -57,9 +60,12 @@ export async function narrateScenes(input: VideoSpec, narration: Narration, onPr
       onProgress?.((i + 1) / input.scenes.length);
       continue;
     }
-    const n = await narration.tts.synth(narration.voiceId, sc.text, narration.speed);
+    const n = await narration.tts.synth(narration.voiceId, sc.text, normalizeTuning({ speed: narration.speed, pitch: narration.pitch, style: narration.style }));
     const durationSec = Math.max(sc.durationSec, Math.ceil((n.durationSec + 0.5) * 10) / 10);
-    scenes.push({ ...sc, audioUrl: narration.audioUrl(n.hash), durationSec, speechSec: n.durationSec });
+    // The voice is told the marks ([pausa], *énfasis*); the screen shows plain text, with real word times when the voice reports them.
+    const text = stripMarkup(sc.text);
+    const wordTimes = n.words?.length ? alignWords(text.split(' '), n.words).map((w) => ({ from: w.from, to: w.to })) : undefined;
+    scenes.push({ ...sc, text, audioUrl: narration.audioUrl(n.hash), durationSec, speechSec: n.durationSec, ...(wordTimes ? { wordTimes } : {}) });
     clips.push({ file: n.file, durationSec });
     onProgress?.((i + 1) / input.scenes.length);
   }
@@ -165,6 +171,7 @@ async function run(job: RenderJob, input: VideoSpec, quality: 'draft' | 'final',
       const hash = await buildSfxTrack(dataDir, spec.scenes, spec.style as never, extras.sfx.config);
       if (hash) spec = { ...spec, sfx: { url: extras.sfx.url(hash) } };
     }
+    spec = { ...spec, scenes: spec.scenes.map((sc) => (sc.card ? sc : { ...sc, text: stripMarkup(sc.text) })) }; // silent videos: marks never reach the screen
     job.label = 'Renderizando';
     await mkdir(join(dataDir, 'renders'), { recursive: true });
     await writeFile(specPath, JSON.stringify(spec));

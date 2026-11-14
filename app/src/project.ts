@@ -20,7 +20,7 @@ export interface Project {
   source: { id: string; name: string; startSec: number; endSec: number; hook: string } | null;
   /** Where the chosen topic's data came from (name, link, metric). Empty for topics typed by hand. */
   topicEvidence: { source: string; url?: string; metric?: string }[];
-  voice: { mode: 'unset' | 'narrate' | 'silent'; voiceId: string; speed: number };
+  voice: { mode: 'unset' | 'narrate' | 'silent'; voiceId: string; speed: number; /** Semitones -6..+6. */ pitch: number; /** Azure speaking style (empty = neutral). */ style: string };
   /** Documentary mode: source checks per scene wording (see core/verification). Pending scenes block rendering. */
   verification: Record<string, SceneCheck>;
   /** Illustration per scene wording (file kept by the server, see core/illustrations). */
@@ -58,7 +58,7 @@ export const EMPTY_PROJECT: Project = {
   script: { choice: 0, text: '' },
   source: null,
   topicEvidence: [],
-  voice: { mode: 'unset', voiceId: '', speed: 1 },
+  voice: { mode: 'unset', voiceId: '', speed: 1, pitch: 0, style: '' },
   verification: {},
   art: {},
   broll: {},
@@ -73,7 +73,7 @@ export const EMPTY_PROJECT: Project = {
 export const defaultPreset = (p: Project): string => PLATFORM_PRESET[(p.platforms[0] as PlatformId) ?? 'tiktok'] ?? 'tiktok';
 export const presetOf = (p: Project): string => p.production.preset || defaultPreset(p);
 /** Narration settings sent with a render (null = silent video). */
-export const voiceOf = (p: Project) => (p.voice.mode === 'narrate' && p.voice.voiceId ? { id: p.voice.voiceId, speed: p.voice.speed } : null);
+export const voiceOf = (p: Project) => (p.voice.mode === 'narrate' && p.voice.voiceId ? { id: p.voice.voiceId, speed: p.voice.speed, pitch: p.voice.pitch ?? 0, style: p.voice.style ?? '' } : null);
 export const specKey = (p: Project): string => JSON.stringify({ spec: toSpec(presetOf(p), p.production.scenes, p.production.themeIdx, p.production.style), voice: voiceOf(p), art: p.production.scenes.map((s) => p.art[textKey(s.text)]?.id ?? ''), music: p.music.track ? { id: p.music.track.id, mix: p.music.mix } : null, sfx: normalizeSfx(p.sfx), broll: p.production.scenes.map((s) => p.broll[textKey(s.text)]?.id ?? '') });
 
 let flushNow: (() => Promise<void>) | null = null;

@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import {
-  DELIVERABLES, buildDescription, chaptersFrom, runFfmpeg, scenesToSrt, slug, validateShorts,
+  DELIVERABLES, buildDescription, chaptersFrom, runFfmpeg, scenesToSrt, slug, stripMarkup, validateShorts,
   type DeliverableId, type Scene, type ShortRange, type VideoSpec,
 } from '@chp/core';
 import { narrateScenes, renderStill, startRender, waitForRender, type Narration, type RenderExtras } from './render.ts';
@@ -102,7 +102,7 @@ async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: strin
   const spoken = (scenes: VideoSpec['scenes']) => scenes.filter((x) => !x.card);
   // The final timeline (scene lengths stretched to fit the narration) drives subtitles, chapters and the voice file.
   let resolved: Awaited<ReturnType<typeof narrateScenes>> | null = null;
-  const timeline = async () => (resolved ??= o.narration ? await narrateScenes(longSpec, o.narration) : { spec: longSpec, clips: [] });
+  const timeline = async () => (resolved ??= o.narration ? await narrateScenes(longSpec, o.narration) : { spec: { ...longSpec, scenes: longSpec.scenes.map((x) => (x.card ? x : { ...x, text: stripMarkup(x.text) })) }, clips: [] });
   const textFile = async (item: PackageItem, name: string, content: string, kind: PackageFile['kind']) => {
     await writeFile(join(dir, name), content, 'utf8');
     item.files.push({ name, url: `/api/deliverable/${job.id}/${name}?dl=1`, kind });

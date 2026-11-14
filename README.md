@@ -157,3 +157,12 @@ En el paso 7, sección **Efectos de sonido** (apagados por defecto): se generan 
 ## Video de stock (B-roll)
 
 En el paso 7, sección **Video de stock**: por escena, busca 3 videos libres y elige uno como **fondo** (con el color de tu estilo encima para que los subtítulos se lean; se recorta a 30 s, va sin audio y se repite si es más corto que la escena). Fuentes sin clave: Wikimedia Commons, Internet Archive (dominio público, CC0, CC BY) y NASA. Con una **clave gratuita** (pégala una vez; se guarda cifrada y nunca se muestra) se suman Pexels y Pixabay, que dan mejor calidad de stock. Los CC BY y NASA salen en la pantalla final y en la descripción. Los términos de búsqueda salen de la misma consulta de IA que las ilustraciones (sin gasto extra).
+
+## Voces en línea
+
+En el paso 6 hay voces neuronales en español **en línea**, además de las locales:
+
+- **Edge** (gratis, sin clave): sirve para probar o para videos personales. Usa un acceso *no oficial* de Microsoft que puede dejar de funcionar, y sus términos para uso comercial no son claros. Entrega **tiempos por palabra**, así que el karaoke de los subtítulos queda sincronizado con la voz.
+- **Azure AI Speech** (oficial, permite uso comercial): crea un recurso «Speech» gratis (capa F0, unos 500 000 caracteres al mes), pega la clave y la región; se guardan cifradas en tu bóveda y nunca se muestran de nuevo. Permite **estilos o emociones** (alegre, triste, susurro…).
+
+Ajustes para cualquier voz: **velocidad**, **tono** (±6 semitonos; en las voces locales se aplica con filtros de audio) y, en Azure, **estilo**. En el guion puedes escribir `[pausa]` o `[pausa 1.5s]` para un silencio y `*palabra*` para darle énfasis; las marcas no salen en pantalla ni en los subtítulos.
