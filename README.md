@@ -42,6 +42,14 @@ Paso 1 → pestaña **«Desde mis archivos»**: sube un podcast, audio, video, t
 
 Si cambias escenas, estilo o voz, el video queda marcado como desactualizado y hay que generarlo de nuevo. Pendiente: carruseles de imágenes, música de fondo y publicación automática (cada plataforma exige tu propia sesión y credenciales de desarrollador).
 
+## Estilo visual (paso 7)
+
+Cada escena tiene movimiento de cámara propio (zoom adentro, zoom afuera, paneos, empuje con leve giro), tres capas con profundidad (fondo, plano medio, partículas al frente), transiciones en el eje Z, **subtítulos karaoke** (hasta 3 palabras, la palabra dicha resalta sobre un marcador) y **números gigantes** que cuentan hasta la cifra de la escena.
+
+- **4 estilos** para elegir, cada uno con «Ver ejemplo» (un fotograma de tu primera escena): Papel recortado, Limpio y moderno, Noticiero y Pastel suave.
+- **Referencias:** sube una imagen o un video y la app saca su **paleta de colores** en tu PC (no se guarda ni se envía), la aplica sobre el estilo que elijas y crea «Mi estilo». Copia colores, no movimientos ni composición.
+- Los tiempos por palabra son **estimados** (proporcionales al largo de cada palabra); con una voz real pueden desviarse una fracción de segundo.
+
 ## Verificación de fuentes (modo documental)
 
 En el paso de producción, cada escena con datos necesita **fuentes comprobadas**:

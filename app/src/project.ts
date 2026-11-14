@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PLATFORM_PRESET, toSpec, type Scene } from '@chp/core/production';
 import type { DeliverableId, ShortRange } from '@chp/core/deliverables';
 import type { SceneCheck } from '@chp/core/verification';
+import { DEFAULT_STYLE, type StyleProfile } from '@chp/core/style';
 import type { PlatformId, PublishCopy } from '@chp/core/schemas';
 import { api } from './api.ts';
 
@@ -18,7 +19,7 @@ export interface Project {
   voice: { mode: 'unset' | 'narrate' | 'silent'; voiceId: string; speed: number };
   /** Documentary mode: source checks per scene wording (see core/verification). Pending scenes block rendering. */
   verification: Record<string, SceneCheck>;
-  production: { preset: string; themeIdx: number; scenes: Scene[] };
+  production: { preset: string; themeIdx: number; scenes: Scene[]; style: StyleProfile };
   renders: { draft: RenderRef | null; draftApproved: boolean; final: RenderRef | null };
   publish: { copy: PublishCopy[] | null; posted: { platform: string; url: string; date: string }[] };
   /** What to produce at the end. `shorts: null` = split automatically. `result` is valid only for the spec it was made from. */
@@ -47,7 +48,7 @@ export const EMPTY_PROJECT: Project = {
   topicEvidence: [],
   voice: { mode: 'unset', voiceId: '', speed: 1 },
   verification: {},
-  production: { preset: '', themeIdx: 0, scenes: [] },
+  production: { preset: '', themeIdx: 0, scenes: [], style: DEFAULT_STYLE },
   renders: { draft: null, draftApproved: false, final: null },
   publish: { copy: null, posted: [] },
   deliverables: { selected: ['long', 'shorts', 'thumbnail', 'description'], shorts: null, thumbTitle: '', summary: '', result: null },
@@ -57,7 +58,7 @@ export const defaultPreset = (p: Project): string => PLATFORM_PRESET[(p.platform
 export const presetOf = (p: Project): string => p.production.preset || defaultPreset(p);
 /** Narration settings sent with a render (null = silent video). */
 export const voiceOf = (p: Project) => (p.voice.mode === 'narrate' && p.voice.voiceId ? { id: p.voice.voiceId, speed: p.voice.speed } : null);
-export const specKey = (p: Project): string => JSON.stringify({ spec: toSpec(presetOf(p), p.production.scenes, p.production.themeIdx), voice: voiceOf(p) });
+export const specKey = (p: Project): string => JSON.stringify({ spec: toSpec(presetOf(p), p.production.scenes, p.production.themeIdx, p.production.style), voice: voiceOf(p) });
 
 let flushNow: (() => Promise<void>) | null = null;
 /** Saves any pending project change right now. Call before actions the server checks against the saved project. */

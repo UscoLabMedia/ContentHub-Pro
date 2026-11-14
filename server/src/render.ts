@@ -58,7 +58,7 @@ export async function narrateScenes(input: VideoSpec, narration: Narration, onPr
     }
     const n = await narration.tts.synth(narration.voiceId, sc.text, narration.speed);
     const durationSec = Math.max(sc.durationSec, Math.ceil((n.durationSec + 0.5) * 10) / 10);
-    scenes.push({ ...sc, audioUrl: narration.audioUrl(n.hash), durationSec });
+    scenes.push({ ...sc, audioUrl: narration.audioUrl(n.hash), durationSec, speechSec: n.durationSec });
     clips.push({ file: n.file, durationSec });
     onProgress?.((i + 1) / input.scenes.length);
   }
@@ -104,6 +104,34 @@ export async function renderStill(props: StillProps, outFile: string, dataDir: s
   } finally {
     await rm(propsPath, { force: true });
   }
+}
+
+let frameQueue: Promise<unknown> = Promise.resolve();
+
+/** One frame of a video (a style preview) as a small PNG. Previews run one at a time. */
+export function renderFrame(spec: VideoSpec, outFile: string, dataDir: string, root: string, frame = 55): Promise<void> {
+  const bad = validateSpec(spec);
+  if (bad) return Promise.reject(new Error(bad));
+  const job = frameQueue.then(async () => {
+    await mkdir(join(dataDir, 'renders'), { recursive: true });
+    const specPath = join(dataDir, 'renders', `${randomBytes(6).toString('hex')}.json`);
+    await writeFile(specPath, JSON.stringify(spec));
+    const tsx = join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const c = spawn(process.execPath, [tsx, 'render.mjs', specPath, 'frame', outFile, String(frame)], { cwd: join(root, 'video'), windowsHide: true });
+        let log = '';
+        c.stdout.on('data', (d) => (log = (log + d).slice(-1500)));
+        c.stderr.on('data', (d) => (log = (log + d).slice(-1500)));
+        c.on('error', reject);
+        c.on('close', (code) => (code === 0 && existsSync(outFile) ? resolve() : reject(new Error(friendly(log)))));
+      });
+    } finally {
+      await rm(specPath, { force: true });
+    }
+  });
+  frameQueue = job.catch(() => undefined);
+  return job;
 }
 
 export async function startRender(spec: VideoSpec, quality: 'draft' | 'final', dataDir: string, root: string, narration?: Narration): Promise<RenderJob> {

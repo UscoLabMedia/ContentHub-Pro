@@ -1,0 +1,146 @@
+import type { CSSProperties } from 'react';
+import { Easing, interpolate, random, spring } from 'remotion';
+import { captionGroups, formatCount, wordTimings, readingSeconds, type HeroNumber, type StyleProfile } from '@chp/core/style';
+
+export interface Cam {
+  s: number;
+  x: number; // percent of width
+  y: number; // percent of height
+  r: number; // degrees
+}
+
+/** A different virtual-camera move per scene (zoom in, zoom out, pan, pan back, push with a slight tilt). */
+export function camera(index: number, frame: number, dur: number, motion: number): Cam {
+  const p = Easing.inOut(Easing.quad)(Math.min(1, frame / Math.max(1, dur)));
+  const m = motion;
+  switch (index % 5) {
+    case 0: return { s: 1.02 + 0.09 * m * p, x: 0, y: 0, r: 0 };
+    case 1: return { s: 1.02 + 0.09 * m * (1 - p), x: 0, y: 0, r: 0 };
+    case 2: return { s: 1.07, x: (0.5 - p) * 6 * m, y: 0, r: 0 };
+    case 3: return { s: 1.07, x: (p - 0.5) * 6 * m, y: 0, r: 0 };
+    default: return { s: 1.03 + 0.08 * m * p, x: 0, y: (0.5 - p) * 3 * m, r: (p - 0.5) * 2.4 * m };
+  }
+}
+
+export const camTransform = (c: Cam, parallax = 1): string => `translate(${c.x * parallax}%, ${c.y * parallax}%) scale(${1 + (c.s - 1) * parallax}) rotate(${c.r * parallax}deg)`;
+
+const fill: CSSProperties = { position: 'absolute', inset: 0 };
+
+/** Back layer: the style's background (solid, paper with torn pieces, halftone dots, or a slow gradient). */
+export const Background = ({ style, frame, index, width, height }: { style: StyleProfile; frame: number; index: number; width: number; height: number }) => {
+  const { bg, accent, accent2 } = style.palette;
+  const drift = frame * 0.25;
+  if (style.background === 'gradient')
+    return <div style={{ ...fill, background: `linear-gradient(${140 + Math.sin(frame / 90) * 12}deg, ${bg} 0%, ${bg} 45%, ${accent2}40 100%)` }} />;
+  if (style.background === 'halftone')
+    return (
+      <div style={{ ...fill, background: bg }}>
+        <div style={{ ...fill, backgroundImage: `radial-gradient(circle, ${accent} 3px, transparent 3.6px)`, backgroundSize: '26px 26px', backgroundPosition: `${drift}px ${drift * 0.6}px`, opacity: 0.22, WebkitMaskImage: 'linear-gradient(135deg, black 0%, transparent 55%)', maskImage: 'linear-gradient(135deg, black 0%, transparent 55%)' }} />
+      </div>
+    );
+  if (style.background === 'paper') {
+    const pieces = [0, 1, 2].map((i) => {
+      const cx = random(`px${index}-${i}`) * width;
+      const cy = random(`py${index}-${i}`) * height;
+      const size = width * (0.5 + random(`ps${index}-${i}`) * 0.4);
+      const jag = Array.from({ length: 9 }, (_, k) => {
+        const a = (k / 9) * Math.PI * 2;
+        const rr = 0.42 + random(`pj${index}-${i}-${k}`) * 0.16;
+        return `${50 + Math.cos(a) * rr * 100}% ${50 + Math.sin(a) * rr * 100}%`;
+      }).join(',');
+      return { cx, cy, size, jag, color: i === 1 ? accent2 : accent, rot: random(`pr${index}-${i}`) * 40 - 20 };
+    });
+    return (
+      <div style={{ ...fill, background: bg, overflow: 'hidden' }}>
+        {pieces.map((p, i) => (
+          <div key={i} style={{ position: 'absolute', left: p.cx - p.size / 2 + Math.sin(frame / 120 + i) * 18, top: p.cy - p.size / 2 + Math.cos(frame / 140 + i) * 14, width: p.size, height: p.size, background: p.color, opacity: 0.16, clipPath: `polygon(${p.jag})`, transform: `rotate(${p.rot + frame * 0.04}deg)` }} />
+        ))}
+        <svg width="100%" height="100%" style={{ ...fill, opacity: 0.1, mixBlendMode: 'multiply' }}>
+          <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed={index + 1} /></filter>
+          <rect width="100%" height="100%" filter="url(#grain)" />
+        </svg>
+      </div>
+    );
+  }
+  return <div style={{ ...fill, background: bg }} />;
+};
+
+/** Middle layer: big rings and bars that move at their own speed (parallax) so the scene is never flat. */
+export const Motif = ({ style, frame, index, width, height }: { style: StyleProfile; frame: number; index: number; width: number; height: number }) => (
+  <div style={fill}>
+    {[0, 1, 2].map((i) => {
+      const size = width * (0.28 + random(`ms${index}-${i}`) * 0.3);
+      const left = random(`ml${index}-${i}`) * width * 0.9 - size * 0.2;
+      const top = random(`mt${index}-${i}`) * height * 0.8 - size * 0.1;
+      const color = i % 2 ? style.palette.accent2 : style.palette.accent;
+      const ring = i !== 2;
+      return (
+        <div key={i} style={{ position: 'absolute', left, top, width: size, height: ring ? size : size * 0.12, borderRadius: ring ? '50%' : 8, border: ring ? `${Math.max(6, width * 0.012)}px solid ${color}` : undefined, background: ring ? undefined : color, opacity: 0.28, transform: `rotate(${frame * (0.15 + i * 0.07) * (i % 2 ? -1 : 1)}deg) scale(${1 + Math.sin(frame / 50 + i) * 0.04})` }} />
+      );
+    })}
+  </div>
+);
+
+/** Front layer: soft blurred pieces crossing faster than everything else (depth). */
+export const Particles = ({ style, frame, index, width, height }: { style: StyleProfile; frame: number; index: number; width: number; height: number }) => {
+  if (!style.particles) return null;
+  const colors = [style.palette.accent, style.palette.accent2, style.palette.fg];
+  return (
+    <div style={{ ...fill, pointerEvents: 'none' }}>
+      {Array.from({ length: 9 }, (_, i) => {
+        const speed = 0.8 + random(`vs${index}-${i}`) * 2.2;
+        const x = ((random(`vx${index}-${i}`) * 1.4 + (frame * speed) / (width * 0.18)) % 1.3) - 0.15;
+        const y = random(`vy${index}-${i}`) * height + Math.sin(frame / 40 + i) * 20;
+        const size = 14 + random(`vz${index}-${i}`) * 46;
+        return <div key={i} style={{ position: 'absolute', left: x * width, top: y, width: size, height: size * (i % 3 === 0 ? 0.6 : 1), borderRadius: i % 2 ? '50%' : 6, background: colors[i % 3], opacity: 0.22 + random(`vo${i}`) * 0.2, filter: `blur(${size > 36 ? 4 : 1.5}px)`, transform: `rotate(${frame * speed}deg)` }} />;
+      })}
+    </div>
+  );
+};
+
+/** A figure that counts up and flies in from the camera. */
+export const Hero = ({ hero, style, frame, fps, width, height }: { hero: HeroNumber; style: StyleProfile; frame: number; fps: number; width: number; height: number }) => {
+  const enter = spring({ frame: frame - 4, fps, config: { damping: 14, stiffness: 120 } });
+  const count = interpolate(frame, [6, 6 + fps * 1.3], [0, hero.value], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
+  const portrait = height > width;
+  const size = width * (portrait ? 0.2 : 0.13);
+  return (
+    <div style={{ position: 'absolute', left: 0, right: 0, top: portrait ? '16%' : '12%', display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${0.6 + 0.4 * enter})`, opacity: Math.min(1, enter * 1.4), filter: `blur(${(1 - Math.min(1, enter)) * 8}px)` }}>
+      <div style={{ fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 900, fontSize: size, lineHeight: 1, color: style.palette.accent, textShadow: `0 ${size * 0.04}px 0 ${style.palette.fg}22`, letterSpacing: -2 }}>{formatCount(count, hero)}</div>
+      {hero.unit && <div style={{ fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 800, fontSize: size * 0.34, color: style.palette.fg, opacity: 0.9, marginTop: size * 0.04 }}>{hero.unit}</div>}
+    </div>
+  );
+};
+
+const readable = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255) > 150 ? '#111111' : '#ffffff';
+};
+
+/** Karaoke captions: up to 3 words at a time, the spoken word pops on a tilted marker. */
+export const Karaoke = ({ text, style, frame, fps, speechSec, durationSec, width, height }: { text: string; style: StyleProfile; frame: number; fps: number; speechSec?: number; durationSec: number; width: number; height: number }) => {
+  const span = Math.max(0.6, Math.min(speechSec ?? readingSeconds(text), durationSec - 0.35));
+  const words = wordTimings(text, 0.15, span);
+  const groups = captionGroups(words);
+  const t = frame / fps;
+  let g = 0;
+  groups.forEach((grp, i) => { if (grp[0]!.from <= t) g = i; });
+  const group = groups[g];
+  if (!group) return null;
+  const portrait = height > width;
+  const fs = width * (portrait ? 0.072 : 0.042);
+  const center = style.subtitle.position === 'center';
+  const stroke = style.palette.bg;
+  return (
+    <div style={{ position: 'absolute', left: '5%', right: '5%', ...(center ? { top: '50%', transform: 'translateY(-50%)' } : { bottom: portrait ? '15%' : '8%' }), display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: fs * 0.18, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 900, fontSize: fs, lineHeight: 1.15, textAlign: 'center' }}>
+      {group.map((w, i) => {
+        const active = t >= w.from && t < w.to + 0.02;
+        const pop = active ? spring({ frame: frame - Math.round(w.from * fps), fps, config: { damping: 11, stiffness: 220 } }) : 1;
+        const marker = active && style.subtitle.marker;
+        return (
+          <span key={`${g}-${i}`} style={{ display: 'inline-block', padding: `0 ${fs * 0.14}px`, borderRadius: fs * 0.12, background: marker ? style.palette.accent : 'transparent', color: marker ? readable(style.palette.accent) : style.palette.fg, transform: `scale(${active ? 1 + 0.16 * Math.min(1, pop) : 1}) rotate(${marker ? -2 : 0}deg)`, textTransform: style.subtitle.uppercase ? 'uppercase' : 'none', WebkitTextStroke: marker ? undefined : `${fs * 0.07}px ${stroke}`, paintOrder: 'stroke fill', textShadow: marker ? undefined : `0 ${fs * 0.05}px 0 ${stroke}88` }}>{w.word}</span>
+        );
+      })}
+    </div>
+  );
+};

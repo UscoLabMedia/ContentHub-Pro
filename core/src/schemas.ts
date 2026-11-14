@@ -94,11 +94,23 @@ export const VerifyOut = z.object({
   ),
 });
 
+export const StyleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  blurb: z.string(),
+  palette: z.object({ bg: z.string(), fg: z.string(), accent: z.string(), accent2: z.string() }),
+  background: z.enum(['solid', 'paper', 'halftone', 'gradient']),
+  motion: z.number(),
+  subtitle: z.object({ uppercase: z.boolean(), marker: z.boolean(), position: z.enum(['bottom', 'center']) }),
+  particles: z.boolean(),
+});
+
 /** Input of the Remotion template; built locally from a script (zero tokens). */
 export const VideoSpec = z.object({
   preset: z.string(),
-  scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional(), card: z.boolean().optional() })),
+  scenes: z.array(z.object({ text: z.string(), durationSec: z.number(), audioUrl: z.string().optional(), card: z.boolean().optional(), speechSec: z.number().optional() })),
   theme: z.object({ bg: z.string(), fg: z.string(), accent: z.string() }).optional(),
+  style: StyleSchema.optional(),
 });
 export type VideoSpec = z.infer<typeof VideoSpec>;
 export type ScriptOption = z.infer<typeof ScriptOut>['options'][number];

@@ -9,7 +9,8 @@
     "./production": "./src/production.ts",
     "./review": "./src/sources/review.ts",
     "./deliverables": "./src/deliverables.ts",
-    "./verification": "./src/verification.ts"
+    "./verification": "./src/verification.ts",
+    "./style": "./src/style.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",
