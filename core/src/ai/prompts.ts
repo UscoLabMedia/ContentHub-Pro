@@ -8,7 +8,7 @@ No inventes datos ni cifras: si el insumo no las trae, no las des. Piensa en con
 
 export const TASK_PROMPTS: Record<Task, string> = {
   trends:
-    'Con las señales recibidas (titulares/temas), propón exactamente 5 temas de conversación masiva ordenados por potencial. virality es 0-10 y es tu estimación, no un dato medido.',
+    'Recibes una lista numerada de datos reales (id|fuente|titulo|metrica). Propón hasta 5 temas de conversación masiva usando SOLO esos datos: cada tema debe citar en sourceIds los ids que lo respaldan (mínimo 1). No inventes hechos ni cifras. Si los datos son pocos o no sirven, devuelve menos temas. context: una frase basada en los datos. virality es tu estimación 0-10 del potencial, no una medición.',
   treatment:
     'Para el tema dado, propón 3 tratamientos: myth (contraste/mito), analogy (analogía cotidiana), history (gancho histórico). Cada uno con título, gancho de una línea y por qué funciona.',
   audience:

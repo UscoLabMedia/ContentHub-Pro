@@ -5,8 +5,8 @@ import { THEMES, scriptToScenes, toSpec, totalDuration } from '@chp/core/product
 import type { MetricsAnalysisOut, PublishCopyOut } from '@chp/core/schemas';
 import { api, getToken } from '../api.ts';
 import { useTask } from '../ai.ts';
-import { presetOf, specKey, type Project } from '../project.ts';
-import { Head, PLATFORMS, Status, card, field, primary, type P } from './Steps.tsx';
+import { presetOf, specKey, voiceOf, type Project } from '../project.ts';
+import { Head, PLATFORMS, Status, card, field, primary, type P } from './ui.tsx';
 
 const secondary = 'rounded-lg border border-slate-700 px-3 py-2 text-xs hover:bg-slate-800 disabled:opacity-40';
 const platformLabel = (id: string) => PLATFORMS.find(([k]) => k === id)?.[1] ?? id;
@@ -17,6 +17,7 @@ interface Job {
   id: string;
   status: 'rendering' | 'done' | 'error';
   progress: number;
+  label?: string;
   error?: string;
 }
 
@@ -40,7 +41,7 @@ function useRender(onDone: (id: string) => void) {
   const start = async (project: Project, quality: 'draft' | 'final') => {
     setErr('');
     try {
-      setJob(await api<Job>('/api/render', { method: 'POST', json: { spec: toSpec(presetOf(project), project.production.scenes, project.production.themeIdx), quality } }));
+      setJob(await api<Job>('/api/render', { method: 'POST', json: { spec: toSpec(presetOf(project), project.production.scenes, project.production.themeIdx), quality, voice: voiceOf(project) } }));
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -55,7 +56,7 @@ function Progress({ job, err }: { job: Job | null; err: string }) {
       {job?.status === 'error' && <p className="text-sm text-rose-400" role="alert">{job.error}</p>}
       {job?.status === 'rendering' && (
         <div role="status">
-          <div className="flex justify-between text-xs text-slate-400"><span>Renderizando en tu equipo…</span><span>{job.progress}%</span></div>
+          <div className="flex justify-between text-xs text-slate-400"><span>{job.label ?? 'Renderizando'} en tu equipo…</span><span>{job.progress}%</span></div>
           <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800" role="progressbar" aria-valuenow={job.progress} aria-valuemin={0} aria-valuemax={100}>
             <div className="h-full bg-indigo-500 transition-all" style={{ width: `${job.progress}%` }} />
           </div>
@@ -67,7 +68,7 @@ function Progress({ job, err }: { job: Job | null; err: string }) {
 }
 
 // ------------------------------------------------------------------ step 6
-export function Step6({ project, set }: P) {
+export function StepProduction({ project, set }: P) {
   const prod = project.production;
   const preset = PRESETS[presetOf(project)];
   const total = totalDuration(prod.scenes);
@@ -89,7 +90,7 @@ export function Step6({ project, set }: P) {
 
   return (
     <div className="space-y-5">
-      <Head n={6} title="Producción" hint="Tu guion se convierte en escenas animadas, en tu equipo y sin gastar IA. Ajusta textos y tiempos." />
+      <Head n={7} title="Producción" hint="Tu guion se convierte en escenas animadas, en tu equipo y sin gastar IA. Ajusta textos y tiempos." />
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-xs font-semibold text-slate-300">Formato de salida
           <select value={presetOf(project)} onChange={(e) => setProd({ preset: e.target.value })} className={`${field} mt-1`}>
@@ -131,7 +132,7 @@ export function Step6({ project, set }: P) {
 }
 
 // ------------------------------------------------------------------ steps 7 & 8
-function RenderStep({ n, quality, project, set }: P & { n: 7 | 8; quality: 'draft' | 'final' }) {
+function RenderStep({ n, quality, project, set }: P & { n: 8 | 9; quality: 'draft' | 'final' }) {
   const key = specKey(project);
   const ref = quality === 'draft' ? project.renders.draft : project.renders.final;
   const fresh = ref?.spec === key;
@@ -147,7 +148,7 @@ function RenderStep({ n, quality, project, set }: P & { n: 7 | 8; quality: 'draf
         title={quality === 'draft' ? 'Borrador para revisar' : 'Render final'}
         hint={quality === 'draft' ? 'Un video liviano para validar textos, tiempos y estilo antes del render final.' : 'Calidad final, máximo 1080p, listo para subir.'}
       />
-      {blocked && <p className="text-sm text-amber-400">Primero aprueba un borrador actualizado en el paso 7.</p>}
+      {blocked && <p className="text-sm text-amber-400">Primero aprueba un borrador actualizado en el paso 8.</p>}
       <button className={primary} disabled={r.busy || blocked} onClick={() => void r.start(project, quality)}>
         {quality === 'draft' ? `Generar borrador (${size})` : `Generar video final (${size})`}
       </button>
@@ -169,8 +170,8 @@ function RenderStep({ n, quality, project, set }: P & { n: 7 | 8; quality: 'draf
     </div>
   );
 }
-export const Step7 = (p: P) => <RenderStep {...p} n={7} quality="draft" />;
-export const Step8 = (p: P) => <RenderStep {...p} n={8} quality="final" />;
+export const StepDraft = (p: P) => <RenderStep {...p} n={8} quality="draft" />;
+export const StepFinal = (p: P) => <RenderStep {...p} n={9} quality="final" />;
 
 // ------------------------------------------------------------------ step 9
 const UPLOAD_PAGE: Record<string, string> = {
@@ -184,7 +185,7 @@ const UPLOAD_PAGE: Record<string, string> = {
 
 const lineAfter = (text: string, label: string) => text.split('\n').find((l) => l.toUpperCase().startsWith(label))?.slice(label.length).trim() ?? '';
 
-export function Step9({ project, set }: P) {
+export function StepPublish({ project, set }: P) {
   const t = useTask<z.infer<typeof PublishCopyOut>>('publishCopy');
   const [urls, setUrls] = useState<Record<string, string>>({});
   const final = project.renders.final;
@@ -194,7 +195,7 @@ export function Step9({ project, set }: P) {
 
   return (
     <div className="space-y-5">
-      <Head n={9} title="Publicación" hint="Te dejo el texto listo para cada plataforma y el video. Publicas tú (cada plataforma exige tu sesión) y aquí registras el enlace para medir resultados." />
+      <Head n={10} title="Publicación" hint="Te dejo el texto listo para cada plataforma y el video. Publicas tú (cada plataforma exige tu sesión) y aquí registras el enlace para medir resultados." />
       <div className="flex flex-wrap gap-2">
         <button className={primary} disabled={t.state.status === 'loading'} onClick={() => void t.run({ topic: project.topic, platforms: project.platforms, hook: lineAfter(project.script.text, 'GANCHO:'), caption: lineAfter(project.script.text, 'CAPTION:') })}>
           Generar textos de publicación
@@ -257,7 +258,7 @@ const toBase64 = (f: File) =>
     r.readAsDataURL(f);
   });
 
-export function Step10({ project }: P) {
+export function StepAnalysis({ project }: P) {
   const [res, setRes] = useState<{ digest: Digest; prompt: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -278,7 +279,7 @@ export function Step10({ project }: P) {
 
   return (
     <div className="space-y-5">
-      <Head n={10} title="Análisis de resultados" hint="Sube las métricas de tus publicaciones (CSV, PDF o captura de pantalla). Se leen en tu equipo sin gastar IA; solo un resumen corto llega al análisis." />
+      <Head n={11} title="Análisis de resultados" hint="Sube las métricas de tus publicaciones (CSV, PDF o captura de pantalla). Se leen en tu equipo sin gastar IA; solo un resumen corto llega al análisis." />
       <input type="file" accept=".csv,.tsv,.txt,.pdf,.png,.jpg,.jpeg,.webp" onChange={(e) => void load(e.target.files?.[0])} aria-label="Subir métricas" className="text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-3 file:py-2 file:text-xs file:text-white" />
       <p className="text-xs text-slate-500">Si la plataforma permite exportar (CSV/PDF) úsalo; si no, una captura de la pantalla de estadísticas sirve (la lectura de imágenes puede fallar con capturas borrosas).</p>
       {busy && <p className="text-sm text-slate-400" role="status">Leyendo el archivo…</p>}

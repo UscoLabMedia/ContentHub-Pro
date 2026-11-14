@@ -34,13 +34,38 @@ Paso 1 → pestaña **«Desde mis archivos»**: sube un podcast, audio, video, t
 - Si pierdes **ambas**, los datos no se pueden recuperar: no hay puerta trasera ni servidor que lo restablezca. Es lo que hace real el cifrado.
 - Desde Ajustes puedes cambiar la contraseña o generar una clave de recuperación nueva (la anterior deja de funcionar).
 
-## Flujo completo (10 pasos)
+## Flujo completo (11 pasos)
 
-1. **Punto de partida:** tendencias o tus propios archivos. 2. **Tratamiento.** 3. **Audiencia.** 4. **Formatos y plataformas.** 5. **Guion.**
-6. **Producción:** el guion se convierte en escenas animadas (editables), en tu PC y sin IA. 7. **Borrador** (mitad de tamaño) que debes aprobar. 8. **Render final** (máx. 1080p) con descarga en MP4.
-9. **Publicación:** textos listos por plataforma (caption, hashtags, horario sugerido) y enlace a cada sitio de subida; tú publicas y registras el enlace. 10. **Análisis:** sube CSV, PDF o captura de tus métricas; se leen en local y la IA interpreta un resumen corto.
+1. **Punto de partida:** tendencias con datos reales o tus propios archivos. 2. **Tratamiento.** 3. **Audiencia.** 4. **Formatos y plataformas.** 5. **Guion.**
+6. **Voz:** escucha muestras de voces gratuitas, elige una (o video sin voz). 7. **Producción:** el guion se convierte en escenas animadas editables, en tu PC y sin IA. 8. **Borrador** (mitad de tamaño, con la voz) que debes aprobar. 9. **Render final** (máx. 1080p) en MP4.
+10. **Publicación:** textos listos por plataforma; tú publicas y registras el enlace. 11. **Análisis:** sube CSV, PDF o captura de tus métricas; se leen en local y la IA interpreta un resumen corto.
 
-Si cambias escenas o estilo, el video queda marcado como desactualizado y hay que generarlo de nuevo. Pendiente: carruseles de imágenes, audio en los videos y publicación automática (cada plataforma exige tu propia sesión y credenciales de desarrollador).
+Si cambias escenas, estilo o voz, el video queda marcado como desactualizado y hay que generarlo de nuevo. Pendiente: carruseles de imágenes, música de fondo y publicación automática (cada plataforma exige tu propia sesión y credenciales de desarrollador).
+
+## Fuentes de los datos (búsqueda de temas)
+
+Los temas salen de datos públicos reales y cada uno muestra de dónde vienen (con enlace):
+
+| Fuente | Qué aporta |
+|---|---|
+| [Google Trends](https://trends.google.com/trending?geo=CO) (feed RSS de búsquedas en tendencia, Colombia) | Qué se busca hoy, con volumen aproximado y los medios que lo cubren |
+| [Google News](https://news.google.com/) (titulares de Colombia y noticias de tu región) | Qué cubren los medios (cada titular nombra su medio) |
+| [Wikipedia en español](https://es.wikipedia.org/) vía la [API de Wikimedia](https://wikimedia.org/api/rest_v1) | Qué artículos se leyeron más ayer |
+
+La IA solo ordena esos datos y cita los que respaldan cada tema; el «potencial» es una estimación suya y se rotula así. El perfil de audiencia y las recomendaciones de formato son estimaciones de la IA, y también se rotulan. Si una fuente no responde, la pantalla lo dice (✔/✘ por fuente) y no se inventa su dato.
+
+## Voces gratuitas
+
+Hay dos motores locales y gratuitos, sin enviar tu texto a ningún servicio:
+
+- **[Piper](https://github.com/rhasspy/piper)** (MIT): voces neuronales en español (Davefx, Ald, Claude y dos básicas alojadas en GitHub) de [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices). El motor y cada voz se descargan solos la primera vez que las escuchas (60–110 MB). Cada voz tiene su licencia: revísala antes de un uso comercial.
+- **Voces de Windows** (System.Speech): sin descarga; aparecen solas si tienes voces en español instaladas.
+
+Alternativas revisadas y no incluidas: [Kokoro](https://github.com/hexgrad/kokoro) (Apache-2.0, muy buena calidad pero exige Python o un runtime pesado), [Coqui XTTS](https://github.com/coqui-ai/TTS) (clonación de voz, necesita GPU y tiene licencia restrictiva) y [eSpeak NG](https://github.com/espeak-ng/espeak-ng) (muy ligera pero robótica).
+
+## Probar que todo funciona
+
+Botón **«Probar todo»** (arriba) o `npm run selftest`. La **prueba rápida** revisa sin descargar nada ni usar IA; la **completa** usa cada pieza de verdad (voz, transcripción, una consulta mínima a la IA, un render de 1 segundo) y descarga lo que falte. Cada punto sale como ✔ funciona, ! aviso, ✘ falla u omitido, con la causa. Hay un botón para copiar el informe.
 
 ## Principios
 
@@ -65,4 +90,5 @@ Si cambias escenas o estilo, el video queda marcado como desactualizado y hay qu
 - `feat/sources-and-engine`: sin presupuesto, IA con tu cuenta de Claude Code, instalador de Windows, botón de edición con Claude Code y contenido desde archivos.
 - `main` contiene todo lo anterior y es lo que recibe cada PC.
 - `feat/production-publish-analysis`: producción y render (6–8), publicación (9) y análisis de resultados (10).
-- Pendiente: carruseles, audio en video, cortes de clips del podcast.
+- `feat/voice-radar-selftest`: voces gratuitas (muestras y narración), fuentes de datos con enlaces, prueba del sistema.
+- Pendiente: carruseles, música de fondo, cortes de clips del podcast.

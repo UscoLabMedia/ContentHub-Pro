@@ -12,6 +12,8 @@ Estas reglas son **obligatorias**. Varias están además forzadas por código o 
 5. **El prefijo del prompt debe ser estable** (`core/src/ai/prompts.ts`): sin fechas, ids ni datos variables antes de la parte variable. Lo variable va solo en el mensaje de usuario.
 6. **Audio, video, PDFs, CSV y capturas se leen en local** (transcripción con whisper.cpp + ffmpeg de Remotion, `core/src/sources` y `core/src/ingest`; cero tokens). Fuentes largas: se condensan con el modelo barato (`sourceHighlights`) antes de pedir ideas. Las métricas con `core/src/ingest` (cero tokens). A la IA solo llega `digestToPrompt(...)` o el texto de la transcripción (resumen de unos cientos de tokens). Prohibido pegar el contenido crudo de un archivo en un prompt.
 7. **Video y gráficos se generan en local** (Remotion / HTML) a partir de un JSON (`VideoSpec`). La IA escribe texto, nunca código de animación por pieza.
+9. **Todo dato mostrado indica su fuente** (nombre y enlace). Lo que sea estimación de la IA se rotula como tal (p. ej. «potencial», perfil de audiencia). La búsqueda de temas parte de datos reales (`core/src/radar`); la IA solo ordena y cita ids, nunca inventa cifras.
+10. **Cada capacidad nueva suma un check en `server/src/selftest.ts`** (`npm run selftest`, o «Probar todo» en la app) para saber qué funciona y qué no en cada PC.
 8. **Resolución máxima 1080p** (consumo en celular). No agregar presets 4K. Borrador = mitad de tamaño (540p).
 
 ## Cómo trabajar en este repo (Claude Code)
@@ -32,7 +34,7 @@ Estas reglas son **obligatorias**. Varias están además forzadas por código o 
 
 ## Mapa
 
-- `core/` cifrado, gateway de IA (dos motores), esquemas, presets, ingesta local, fuentes y transcripción
+- `core/` cifrado, gateway de IA (dos motores), esquemas, presets, ingesta local, fuentes, transcripción, voces (`voice/`) y radar de datos (`radar/`)
 - `server/` servidor local (bóveda, motor de IA, fuentes, ingesta)
 - `app/` interfaz React + Vite + Tailwind
 - `video/` plantillas Remotion y `render.mjs`

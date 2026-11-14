@@ -63,6 +63,9 @@ export function validateSpec(spec: VideoSpec): string | null {
   if (!spec.scenes.length || spec.scenes.length > 60) return 'Debe haber entre 1 y 60 escenas';
   if (spec.scenes.some((s) => !s.text.trim() || s.text.length > 300 || !(s.durationSec >= 1 && s.durationSec <= 30))) return 'Escena inválida (texto vacío/largo o duración fuera de 1–30 s)';
   if (p.maxSeconds && totalDuration(spec.scenes) > p.maxSeconds + 5) return `Dura más de lo permitido para este formato (${p.maxSeconds} s)`;
+  // Narration audio is only ever added by the local server, pointing at its own audio endpoint.
+  const audio = /^http:\/\/127\.0\.0\.1:\d{2,5}\/api\/audio\/[a-f0-9]{40}\.wav\?s=[a-f0-9]{64}$/;
+  if (spec.scenes.some((s) => s.audioUrl !== undefined && !audio.test(s.audioUrl))) return 'Audio inválido';
   const hex = /^#[0-9a-fA-F]{6}$/;
   if (spec.theme && !(hex.test(spec.theme.bg) && hex.test(spec.theme.fg) && hex.test(spec.theme.accent))) return 'Colores inválidos';
   return null;

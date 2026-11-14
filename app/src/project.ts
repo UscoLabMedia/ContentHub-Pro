@@ -11,6 +11,9 @@ export interface Project {
   script: { choice: number; text: string };
   /** Set when the idea came from one of the user's own files (podcast, video, text). */
   source: { id: string; name: string; startSec: number; endSec: number; hook: string } | null;
+  /** Where the chosen topic's data came from (name, link, metric). Empty for topics typed by hand. */
+  topicEvidence: { source: string; url?: string; metric?: string }[];
+  voice: { mode: 'unset' | 'narrate' | 'silent'; voiceId: string; speed: number };
   production: { preset: string; themeIdx: number; scenes: Scene[] };
   renders: { draft: RenderRef | null; draftApproved: boolean; final: RenderRef | null };
   publish: { copy: PublishCopy[] | null; posted: { platform: string; url: string; date: string }[] };
@@ -29,6 +32,8 @@ export const EMPTY_PROJECT: Project = {
   platforms: [],
   script: { choice: 0, text: '' },
   source: null,
+  topicEvidence: [],
+  voice: { mode: 'unset', voiceId: '', speed: 1 },
   production: { preset: '', themeIdx: 0, scenes: [] },
   renders: { draft: null, draftApproved: false, final: null },
   publish: { copy: null, posted: [] },
@@ -36,7 +41,9 @@ export const EMPTY_PROJECT: Project = {
 
 export const defaultPreset = (p: Project): string => PLATFORM_PRESET[(p.platforms[0] as PlatformId) ?? 'tiktok'] ?? 'tiktok';
 export const presetOf = (p: Project): string => p.production.preset || defaultPreset(p);
-export const specKey = (p: Project): string => JSON.stringify(toSpec(presetOf(p), p.production.scenes, p.production.themeIdx));
+/** Narration settings sent with a render (null = silent video). */
+export const voiceOf = (p: Project) => (p.voice.mode === 'narrate' && p.voice.voiceId ? { id: p.voice.voiceId, speed: p.voice.speed } : null);
+export const specKey = (p: Project): string => JSON.stringify({ spec: toSpec(presetOf(p), p.production.scenes, p.production.themeIdx), voice: voiceOf(p) });
 
 /** Project state saved (encrypted) in the vault, debounced. */
 export function useProject() {
@@ -45,7 +52,7 @@ export function useProject() {
   useEffect(() => {
     api<{ project: Project | null }>('/api/project').then((r) => {
       const saved = r.project ?? ({} as Partial<Project>);
-      setProject({ ...EMPTY_PROJECT, ...saved, production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish } });
+      setProject({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish } });
       loaded.current = true;
     });
   }, []);

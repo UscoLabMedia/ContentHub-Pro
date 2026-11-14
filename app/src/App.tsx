@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { api, type EngineView } from './api.ts';
-import { STEPS } from './steps.ts';
+import { STEPS, TOTAL } from './steps.ts';
 import { useProject } from './project.ts';
 import { EditCode } from './components/EditCode.tsx';
 import { Settings } from './components/Settings.tsx';
-import { Step10, Step6, Step7, Step8, Step9 } from './components/Production.tsx';
+import { StepAnalysis, StepDraft, StepFinal, StepProduction, StepPublish } from './components/Production.tsx';
+import { SelfTest } from './components/SelfTest.tsx';
+import { StepVoice } from './components/Voice.tsx';
 import { STEP_COMPONENTS, canAdvance } from './components/Steps.tsx';
 
-const ALL_STEPS = [...STEP_COMPONENTS, Step6, Step7, Step8, Step9, Step10];
+const ALL_STEPS = [...STEP_COMPONENTS, StepVoice, StepProduction, StepDraft, StepFinal, StepPublish, StepAnalysis];
 import { Unlock } from './components/Unlock.tsx';
 
 interface Status {
@@ -20,6 +22,7 @@ function Workspace() {
   const [step, setStep] = useState(1);
   const [settings, setSettings] = useState(false);
   const [editCode, setEditCode] = useState(false);
+  const [selfTest, setSelfTest] = useState(false);
   const [tick, setTick] = useState(0);
   const [engine, setEngine] = useState<EngineView | null>(null);
   useEffect(() => {
@@ -43,6 +46,7 @@ function Workspace() {
             {connected ? (engine?.engine === 'api' ? 'IA: clave de API' : 'IA: Claude Code conectado') : 'IA: sin conectar'}
           </button>
           <button onClick={() => setEditCode(true)} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-800">Editar con Claude Code</button>
+          <button onClick={() => setSelfTest(true)} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-800">Probar todo</button>
           <button onClick={() => setSettings(true)} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-800">Ajustes</button>
         </div>
       </header>
@@ -66,9 +70,10 @@ function Workspace() {
       </div>
       <footer className="flex items-center justify-between border-t border-slate-800 bg-slate-900 px-4 py-3">
         <button disabled={step === 1} onClick={() => setStep(step - 1)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm disabled:opacity-30">Anterior</button>
-        <span className="text-xs text-slate-400">Paso {step} de 10</span>
-        <button disabled={step >= 10 || !canAdvance(step, project)} onClick={() => setStep(step + 1)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium disabled:opacity-40">Siguiente</button>
+        <span className="text-xs text-slate-400">Paso {step} de {TOTAL}</span>
+        <button disabled={step >= TOTAL || !canAdvance(step, project)} onClick={() => setStep(step + 1)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium disabled:opacity-40">Siguiente</button>
       </footer>
+      {selfTest && <SelfTest onClose={() => setSelfTest(false)} />}
       {editCode && <EditCode onClose={() => setEditCode(false)} />}
       {settings && <Settings onClose={() => setSettings(false)} onChanged={() => setTick((t) => t + 1)} />}
     </div>
