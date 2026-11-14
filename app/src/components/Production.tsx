@@ -116,8 +116,8 @@ export function StepProduction({ project, set }: P) {
         {prod.scenes.map((sc, i) => (
           <div key={i} className="flex items-start gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-2">
             <span className="mt-2 w-5 text-center text-xs text-slate-500">{i + 1}</span>
-            <textarea rows={2} value={sc.text} aria-label={`Texto escena ${i + 1}`} onChange={(e) => setProd({ scenes: prod.scenes.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)) })} className={`${field} flex-1`} />
-            <input type="number" min={1} max={sc.original ? 3600 : 30} disabled={!!sc.original} title={sc.original ? 'Dura lo que dura tu fragmento de audio' : undefined} value={sc.durationSec} aria-label={`Duración escena ${i + 1}`} onChange={(e) => setProd({ scenes: prod.scenes.map((x, k) => (k === i ? { ...x, durationSec: Number(e.target.value) } : x)) })} className={`${field} w-16`} />
+            <textarea rows={2} value={sc.text} aria-label={`Texto escena ${i + 1}`} onChange={(e) => setProd({ scenes: prod.scenes.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)) })} className={`${field} min-w-0 flex-1`} />
+            <input type="number" min={1} max={sc.original ? 3600 : 30} disabled={!!sc.original} title={sc.original ? 'Dura lo que dura tu fragmento de audio' : undefined} value={sc.durationSec} aria-label={`Duración escena ${i + 1}`} onChange={(e) => setProd({ scenes: prod.scenes.map((x, k) => (k === i ? { ...x, durationSec: Number(e.target.value) } : x)) })} className={`${field} !w-20 shrink-0`} />
             <div className="flex flex-col gap-1">
               <button className={secondary} aria-label="Subir" onClick={() => move(i, -1)}>↑</button>
               <button className={secondary} aria-label="Bajar" onClick={() => move(i, 1)}>↓</button>
