@@ -5,7 +5,26 @@
 // Only public domain, CC0 and CC BY are accepted (usable commercially). CC BY needs a credit: it goes on the
 // closing card and in the description, like the sources.
 import { keywordsOf } from './freesearch.ts';
+import type { z } from 'zod';
+import type { ArtKindEnum } from './schemas.ts';
 import { normalize } from './verification.ts';
+
+export type ArtKind = z.infer<typeof ArtKindEnum>;
+export interface ArtStyle {
+  kind: ArtKind;
+  /** How to draw it, in a sentence (from the reference video; the default of the kind when missing). */
+  notes?: string;
+}
+
+/** The kinds of images a style can ask for: how to search them (Openverse category) and how to draw them as a simple vector. */
+export const ART_KINDS: Record<ArtKind, { label: string; words: string; draw: string; category: 'illustration' | 'photograph' }> = {
+  flat: { label: 'Ilustración plana', words: 'flat vector illustration', draw: 'formas planas de color liso, sin contornos ni degradados', category: 'illustration' },
+  line: { label: 'Trazo de línea / iconos', words: 'line art icon', draw: 'solo contornos de línea fina y uniforme, sin relleno', category: 'illustration' },
+  handdrawn: { label: 'Dibujo a mano / garabato', words: 'hand drawn doodle', draw: 'trazos irregulares tipo marcador, esquinas imperfectas, sin simetría exacta', category: 'illustration' },
+  collage: { label: 'Recortes de papel / collage', words: 'paper cutout collage', draw: 'formas recortadas con borde claro tipo sticker, colores planos', category: 'illustration' },
+  photo: { label: 'Fotografía', words: 'photo', draw: 'silueta muy simple del objeto (una foto no se puede dibujar)', category: 'photograph' },
+};
+export const isArtKind = (k: unknown): k is ArtKind => typeof k === 'string' && k in ART_KINDS;
 
 type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 const UA = 'ContentHubPro/1.0 (personal content tool; image search)';
@@ -112,8 +131,12 @@ export function relevant(cands: ArtCandidate[], query: string): ArtCandidate[] {
   });
 }
 
-/** Free web search, best first. Never throws: a provider that fails is skipped. */
-export async function searchArt(query: string, fetcher: Fetcher = fetch, limit = 6): Promise<ArtCandidate[]> {
+/**
+ * Free web search, best first. Never throws: a provider that fails is skipped.
+ * With a `kind`, Openverse is asked for that category (illustration or photograph) and the matching format ranks first
+ * (drawings for illustrations, bitmaps for photos); if nothing is found it searches again without the filter.
+ */
+export async function searchArt(query: string, fetcher: Fetcher = fetch, limit = 6, kind?: ArtKind): Promise<ArtCandidate[]> {
   const q = query.trim();
   if (!q) return [];
   const get = async (url: string): Promise<unknown> => {
@@ -121,15 +144,20 @@ export async function searchArt(query: string, fetcher: Fetcher = fetch, limit =
     if (!r.ok) throw new Error(String(r.status));
     return r.json();
   };
+  const run = async (category?: string): Promise<ArtCandidate[]> => {
   const jobs: Promise<ArtCandidate[]>[] = [
-    get(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&license=cc0,pdm,by&page_size=12&mature=false`).then(parseOpenverse),
+    get(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&license=cc0,pdm,by&page_size=12&mature=false${category ? `&category=${category}` : ''}`).then(parseOpenverse),
     get(`https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=10&gsrsearch=${encodeURIComponent(`${q} filetype:bitmap|drawing`)}&prop=imageinfo&iiprop=url|mime|extmetadata&iiurlwidth=1280`).then(parseCommons),
   ];
   const settled = await Promise.allSettled(jobs);
-  const all = settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []));
-  // Drawings (SVG) first: they match any style; then by license ease (no credit needed) before CC BY.
-  const rank = (c: ArtCandidate) => (c.url.endsWith('.svg') ? 0 : 1) + (c.license === 'by' ? 0.5 : 0);
-  return relevant(all, q).sort((a, b) => rank(a) - rank(b)).slice(0, limit);
+  return settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []));
+  };
+  // Without a kind: drawings (SVG) first, as they match any style. Then by license ease (no credit needed) before CC BY.
+  const drawingsFirst = kind !== 'photo';
+  const rank = (c: ArtCandidate) => (c.url.endsWith('.svg') === drawingsFirst ? 0 : 1) + (c.license === 'by' ? 0.5 : 0);
+  let found = relevant(await run(kind ? ART_KINDS[kind].category : undefined), q);
+  if (!found.length && kind) found = relevant(await run(), q);
+  return found.sort((a, b) => rank(a) - rank(b)).slice(0, limit);
 }
 
 // ----------------------------------------------------------------------------- SVG drawn by the model

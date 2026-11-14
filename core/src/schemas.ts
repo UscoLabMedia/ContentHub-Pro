@@ -113,6 +113,10 @@ export const SubtitleStyleSchema = z.object({
   animation: SubAnimEnum, rotate: z.array(SubAnimEnum), position: z.enum(['top', 'center', 'bottom']), size: z.number(), wordsPerGroup: z.number(),
 });
 
+/** The kind of images that accompany a video, copied from a reference: guides the image search and the SVG drawing. */
+export const ArtKindEnum = z.enum(['flat', 'line', 'handdrawn', 'collage', 'photo']);
+export const ArtStyleSchema = z.object({ kind: ArtKindEnum, notes: z.string().max(160).optional() });
+
 export const StyleSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -125,6 +129,7 @@ export const StyleSchema = z.object({
   cameraPattern: z.array(z.enum(['zoomIn', 'zoomOut', 'panL', 'panR', 'push', 'still'])).optional(),
   pace: z.number().optional(),
   captions: SubtitleStyleSchema.optional(),
+  art: ArtStyleSchema.optional(),
 });
 
 export const StyleSheetOut = z.object({
@@ -135,6 +140,9 @@ export const StyleSheetOut = z.object({
   uppercaseText: z.boolean(),
   highlightedWords: z.boolean(),
   notes: z.string(),
+  /** Kind of images/illustrations seen in the video (optional: answers cached before it existed still validate). */
+  artKind: ArtKindEnum.optional(),
+  artNotes: z.string().max(120).optional(),
 });
 export type StyleSheet = z.infer<typeof StyleSheetOut>;
 

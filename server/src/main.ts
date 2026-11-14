@@ -11,7 +11,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
   Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
-  OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, segmentsIn, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
+  OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, segmentsIn, ART_KINDS, isArtKind, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderCarouselSlide, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
@@ -801,7 +801,7 @@ const server = createServer(async (req, res) => {
       if (!s.gateway || !scenes.length) return json(res, 200, { items: local, ai: false });
       try {
         // One cheap query for the whole script (cached): English search terms per scene.
-        const st = b.style && typeof b.style === 'object' ? `ESTILO ${String(b.style.name ?? '').slice(0, 40)}|fondo ${String(b.style.background ?? '').slice(0, 12)}` : 'ESTILO libre';
+        const st = b.style && typeof b.style === 'object' ? `ESTILO ${String(b.style.name ?? '').slice(0, 40)}|fondo ${String(b.style.background ?? '').slice(0, 12)}${isArtKind(b.style.art?.kind) ? `|imágenes ${ART_KINDS[b.style.art.kind as keyof typeof ART_KINDS].words}` : ''}` : 'ESTILO libre';
         const r = await s.gateway.run('artQueries', `${st}\n${scenes.map((x) => `${textKey(x.text)}|${x.text}`).join('\n')}`);
         const got = new Map(r.data.scenes.map((x) => [x.key, x]));
         return json(res, 200, { items: local.map((l) => ({ ...l, ...(got.get(l.key)?.query ? { query: got.get(l.key)!.query, draw: got.get(l.key)!.draw } : {}) })), ai: true });
@@ -810,10 +810,11 @@ const server = createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/art/search' && req.method === 'POST') {
-      const q = String((await readBody(req)).query ?? '').slice(0, 80);
+      const body = await readBody(req);
+      const q = String(body.query ?? '').slice(0, 80);
       // Test seam: CHP_ART_TEST_URL replaces the public providers with a local fixture (never set in normal use).
       const test = process.env.CHP_ART_TEST_URL;
-      return json(res, 200, { candidates: test ? ((await (await fetch(`${test}?q=${encodeURIComponent(q)}`)).json()) as unknown[]) : await searchArt(q) });
+      return json(res, 200, { candidates: test ? ((await (await fetch(`${test}?q=${encodeURIComponent(q)}`)).json()) as unknown[]) : await searchArt(q, fetch, 6, isArtKind(body.kind) ? body.kind : undefined) });
     }
     if (url.pathname === '/api/art/use' && req.method === 'POST') {
       const c = (await readBody(req)).candidate ?? {};
@@ -832,7 +833,8 @@ const server = createServer(async (req, res) => {
       const hex = (v: unknown) => (/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v) : '#888888');
       const desc = String(b.desc ?? '').slice(0, 200);
       if (!desc.trim()) return json(res, 400, { error: 'Falta qué dibujar' });
-      const r = await s.gateway.run('drawIllustration', `DIBUJA: ${desc}\nPALETA: ${hex(p.fg)} ${hex(p.accent)} ${hex(p.accent2)} ${hex(p.bg)}`);
+      const how = isArtKind(b.style?.kind) ? `\nESTILO DE DIBUJO: ${ART_KINDS[b.style.kind as keyof typeof ART_KINDS].label}: ${String(b.style.notes ?? '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 160).trim() || ART_KINDS[b.style.kind as keyof typeof ART_KINDS].draw}` : '';
+      const r = await s.gateway.run('drawIllustration', `DIBUJA: ${desc}\nPALETA: ${hex(p.fg)} ${hex(p.accent)} ${hex(p.accent2)} ${hex(p.bg)}${how}`);
       const svg = sanitizeSvg(r.data.svg);
       if (!svg) return json(res, 422, { error: 'El dibujo no fue válido; inténtalo de nuevo' });
       return json(res, 200, { art: await saveDrawn(DATA_DIR, svg, desc) });

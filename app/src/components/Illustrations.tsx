@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { textKey } from '@chp/core/verification';
-import type { ArtCandidate, ArtRef } from '@chp/core/illustrations';
+import { ART_KINDS, isArtKind, type ArtCandidate, type ArtKind, type ArtRef } from '@chp/core/illustrations';
 import { api, getToken } from '../api.ts';
 import { flushProject, type Project } from '../project.ts';
-import { type P } from './ui.tsx';
+import { field, type P } from './ui.tsx';
 
 const secondary = 'rounded-lg border border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-800 disabled:opacity-40';
 const fileUrl = (a: Pick<ArtRef, 'id' | 'ext'>) => `/api/art/${a.id}.${a.ext}?s=${getToken()}`;
@@ -24,6 +24,12 @@ export function Illustrations({ project, set }: P) {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
+  /** Chooses the kind of illustration by hand (it replaces what the reference video suggested). */
+  const setArt = (kind: string) => {
+    const { art: _old, ...rest } = style;
+    set({ ...project, production: { ...project.production, style: isArtKind(kind) ? { ...rest, art: { kind } } : rest } });
+  };
+
   const put = (patch: Record<string, ArtRef | null>) => {
     const next = { ...project.art };
     for (const [k, v] of Object.entries(patch)) {
@@ -35,7 +41,7 @@ export function Illustrations({ project, set }: P) {
 
   /** Search terms for every scene: one cheap AI query per script (English, visual), or local words if there is no AI. */
   const queries = async (): Promise<Record<string, Info>> => {
-    const r = await api<{ items: { key: string; query: string; draw: string }[] }>('/api/art/queries', { method: 'POST', json: { scenes: scenes.map((s) => ({ text: s.text })), style: { name: style.name, background: style.background } } });
+    const r = await api<{ items: { key: string; query: string; draw: string }[] }>('/api/art/queries', { method: 'POST', json: { scenes: scenes.map((s) => ({ text: s.text })), style: { name: style.name, background: style.background, art: style.art } } });
     return Object.fromEntries(r.items.map((x) => [x.key, { query: x.query, draw: x.draw, cands: null }]));
   };
 
@@ -53,7 +59,7 @@ export function Illustrations({ project, set }: P) {
         if (art[k]) continue;
         setMsg(`Buscando imagen libre para la escena ${i + 1} de ${scenes.length}…`);
         const q = qs[k]?.query ?? '';
-        const { candidates } = await api<{ candidates: ArtCandidate[] }>('/api/art/search', { method: 'POST', json: { query: q } });
+        const { candidates } = await api<{ candidates: ArtCandidate[] }>('/api/art/search', { method: 'POST', json: { query: q, kind: style.art?.kind } });
         nextInfo[k] = { ...qs[k]!, cands: candidates };
         for (const c of candidates) {
           try {
@@ -95,7 +101,7 @@ export function Illustrations({ project, set }: P) {
       let i = info[key];
       if (!i) i = (await queries())[key];
       if (!i) throw new Error('No pude preparar la búsqueda');
-      const { candidates } = await api<{ candidates: ArtCandidate[] }>('/api/art/search', { method: 'POST', json: { query: i.query || text.slice(0, 60) } });
+      const { candidates } = await api<{ candidates: ArtCandidate[] }>('/api/art/search', { method: 'POST', json: { query: i.query || text.slice(0, 60), kind: style.art?.kind } });
       setInfo((p) => ({ ...p, [key]: { ...i!, cands: candidates } }));
     } catch (e) {
       setErr((e as Error).message);
@@ -109,7 +115,7 @@ export function Illustrations({ project, set }: P) {
     try {
       const desc = info[key]?.draw || text.slice(0, 140);
       setInfo((p) => (p[key] ? { ...p, [key]: { ...p[key]!, cands: null } } : p));
-      put({ [key]: (await api<{ art: ArtRef }>('/api/art/draw', { method: 'POST', json: { desc, palette: style.palette } })).art });
+      put({ [key]: (await api<{ art: ArtRef }>('/api/art/draw', { method: 'POST', json: { desc, palette: style.palette, style: style.art } })).art });
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -120,6 +126,17 @@ export function Illustrations({ project, set }: P) {
     <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4" aria-label="Ilustraciones">
       <h3 className="text-sm font-semibold">Ilustraciones por escena</h3>
       <p className="text-xs text-slate-400">Primero busca imágenes libres en la web (Openverse y Wikimedia Commons; solo dominio público, CC0 y CC BY, con crédito automático). Cuesta una consulta pequeña de IA para todo el guion. Si no hay nada que sirva, puedes pedir un dibujo SVG con los colores de tu estilo.</p>
+      <div className="space-y-1 rounded-lg border border-slate-800 bg-slate-950 p-2">
+        <label className="block text-xs font-semibold text-slate-300">Tipo de ilustración del estilo
+          <select value={style.art?.kind ?? ''} onChange={(e) => setArt(e.target.value)} className={`${field} mt-1`} aria-label="Tipo de ilustración">
+            <option value="">Cualquiera (sin estilo)</option>
+            {(Object.keys(ART_KINDS) as ArtKind[]).map((k) => <option key={k} value={k}>{ART_KINDS[k].label}</option>)}
+          </select>
+        </label>
+        <p className="text-[11px] text-slate-500">
+          {style.art ? `La búsqueda pide ese tipo de imagen y el dibujo de IA lo sigue${style.art.notes ? `: «${style.art.notes}»` : ''}.` : 'Si subes un video de referencia en «Estilo visual» y pulsas «Afinar con IA», aquí se rellena solo con el tipo de ilustración que use tu video. También puedes elegirlo a mano.'}
+        </p>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <button className={secondary} disabled={!!busy || scenes.length === 0} onClick={() => void findAll()}>{busy === 'all' ? 'Buscando…' : 'Buscar ilustraciones'}</button>
         {Object.keys(art).length > 0 && <button className={secondary} disabled={!!busy} onClick={() => put(Object.fromEntries(Object.keys(art).map((k) => [k, null])))}>Quitar todas</button>}

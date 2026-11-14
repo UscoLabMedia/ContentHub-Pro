@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { artCredits, artQuery, creditLine, licenseOf, parseCommons, parseOpenverse, relevant, sanitizeSvg, searchArt } from '../src/illustrations.ts';
+import { ART_KINDS, artCredits, artQuery, creditLine, isArtKind, licenseOf, parseCommons, parseOpenverse, relevant, sanitizeSvg, searchArt } from '../src/illustrations.ts';
+import { StyleSchema, StyleSheetOut } from '../src/schemas.ts';
 
 describe('licenses', () => {
   it('accepts CC0, public domain and CC BY only', () => {
@@ -85,5 +86,50 @@ describe('credits', () => {
     const art = { k1: { id: 'a'.repeat(16), kind: 'image', ext: 'png', title: 't', origin: 'web', credit: '«A», X (CC BY 4.0)' }, k2: { id: 'b'.repeat(16), kind: 'svg', ext: 'svg', title: 't', origin: 'ai', credit: '' } } as const;
     const keyOf = (t: string) => (t === 'uno' || t === 'dos' ? 'k1' : 'k2');
     expect(artCredits([{ text: 'uno' }, { text: 'dos' }, { text: 'tres' }], art as never, keyOf)).toEqual(['«A», X (CC BY 4.0)']);
+  });
+});
+
+describe('illustration kind of a style', () => {
+  const row = (id: string, ext: string) => ({ id, title: `GPS satellite ${id}`, url: `https://i/${id}.${ext}`, creator: 'A', license: 'cc0', filetype: ext });
+  const urls: string[] = [];
+  const fetcherFor = (results: unknown[], emptyWhenCategory = false) => (async (u: string) => {
+    if (!u.includes('openverse')) return new Response('x', { status: 500 });
+    urls.push(u);
+    return new Response(JSON.stringify({ results: emptyWhenCategory && u.includes('category=') ? [] : results }));
+  }) as unknown as typeof fetch;
+  it('knows its kinds, each with search words and a drawing hint', () => {
+    expect(isArtKind('flat')).toBe(true);
+    expect(isArtKind('3d')).toBe(false);
+    for (const k of Object.values(ART_KINDS)) expect(k.words.length && k.draw.length).toBeTruthy();
+  });
+  it('asks Openverse for the category of the kind, and none without a kind', async () => {
+    urls.length = 0;
+    await searchArt('gps satellite', fetcherFor([row('a', 'svg')]), 6, 'flat');
+    await searchArt('gps satellite', fetcherFor([row('a', 'svg')]), 6, 'photo');
+    await searchArt('gps satellite', fetcherFor([row('a', 'svg')]));
+    expect(urls[0]).toContain('category=illustration');
+    expect(urls[1]).toContain('category=photograph');
+    expect(urls[2]).not.toContain('category=');
+  });
+  it('ranks drawings first for illustrations and bitmaps first for photos', async () => {
+    const rows = [row('png1', 'png'), row('svg1', 'svg')];
+    expect((await searchArt('gps satellite', fetcherFor(rows), 6, 'flat')).map((x) => x.id)).toEqual(['ov-svg1', 'ov-png1']);
+    expect((await searchArt('gps satellite', fetcherFor(rows), 6, 'photo')).map((x) => x.id)).toEqual(['ov-png1', 'ov-svg1']);
+  });
+  it('searches again without the filter when the category finds nothing', async () => {
+    urls.length = 0;
+    const r = await searchArt('gps satellite', fetcherFor([row('a', 'svg')], true), 6, 'line');
+    expect(r.map((x) => x.id)).toEqual(['ov-a']);
+    expect(urls).toHaveLength(2);
+    expect(urls[1]).not.toContain('category=');
+  });
+  it('the style and the AI sheet accept a kind, and still validate without one', () => {
+    const style = { id: 's', name: 'n', blurb: 'b', palette: { bg: '#000000', fg: '#ffffff', accent: '#ff0000', accent2: '#00ff00' }, background: 'solid', motion: 0.5, subtitle: { uppercase: false, marker: false, position: 'bottom' }, particles: false };
+    expect(StyleSchema.safeParse({ ...style, art: { kind: 'flat', notes: 'línea gruesa' } }).success).toBe(true);
+    expect(StyleSchema.safeParse(style).success).toBe(true);
+    expect(StyleSchema.safeParse({ ...style, art: { kind: '3d' } }).success).toBe(false);
+    const sheet = { background: 'solid', cutouts: false, handDrawn: false, particles: false, uppercaseText: false, highlightedWords: false, notes: 'x' };
+    expect(StyleSheetOut.safeParse({ ...sheet, artKind: 'collage', artNotes: 'bordes blancos' }).success).toBe(true);
+    expect(StyleSheetOut.safeParse(sheet).success).toBe(true);
   });
 });

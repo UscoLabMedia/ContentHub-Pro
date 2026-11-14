@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { STYLES, type StylePalette, type StyleProfile } from '@chp/core/style';
 import { styleFromFingerprint, type Fingerprint } from '@chp/core/motion';
 import type { StyleSheet } from '@chp/core/schemas';
+import { ART_KINDS } from '@chp/core/illustrations';
 import { api, getToken } from '../api.ts';
 import { flushProject, presetOf, type Project } from '../project.ts';
 import { type P } from './ui.tsx';
@@ -24,8 +25,8 @@ export function StyleSelector({ project, set }: P) {
   const [ai, setAi] = useState<StyleSheet | null>(null);
   const [base, setBase] = useState('paper');
 
-  // The subtitle look is the person's own choice: picking another visual style keeps it.
-  const choose = (s: StyleProfile) => set({ ...project, production: { ...project.production, style: { ...s, captions: s.captions ?? current.captions } } });
+  // The subtitle look and the kind of illustration are the person's own choices: picking another visual style keeps them.
+  const choose = (s: StyleProfile) => set({ ...project, production: { ...project.production, style: { ...s, captions: s.captions ?? current.captions, art: s.art ?? current.art } } });
 
   const show = async (s: StyleProfile) => {
     setErr('');
@@ -73,7 +74,7 @@ export function StyleSelector({ project, set }: P) {
     const b = STYLES.find((x) => x.id === base) ?? STYLES[0]!;
     const fp = ref.fingerprint;
     const st = fp ? styleFromFingerprint(fp, b, ref.palette) : { ...b, id: 'custom', name: 'Mi estilo', blurb: 'Basado en los colores de tu referencia.', palette: ref.palette };
-    return ai ? { ...st, background: ai.background, particles: ai.particles, subtitle: { ...st.subtitle, uppercase: ai.uppercaseText, marker: ai.highlightedWords } } : st;
+    return ai ? { ...st, background: ai.background, particles: ai.particles, subtitle: { ...st.subtitle, uppercase: ai.uppercaseText, marker: ai.highlightedWords }, ...(ai.artKind ? { art: { kind: ai.artKind, notes: ai.artNotes } } : {}) } : st;
   })() : null;
 
   return (
@@ -114,7 +115,7 @@ export function StyleSelector({ project, set }: P) {
                 <li>Subtítulos: {ref.fingerprint.layout.subtitle === 'center' ? 'al centro' : 'abajo'} · detalle {ref.fingerprint.layout.detail}</li>
               </ul>
             )}
-            {ai && <p className="text-[11px] text-emerald-400" role="status">IA: fondo {ai.background}{ai.cutouts ? ', recortes' : ''}{ai.handDrawn ? ', trazos a mano' : ''}{ai.notes ? ` — ${ai.notes}` : ''}</p>}
+            {ai && <p className="text-[11px] text-emerald-400" role="status">IA: fondo {ai.background}{ai.cutouts ? ', recortes' : ''}{ai.handDrawn ? ', trazos a mano' : ''}{ai.artKind ? `, ilustraciones: ${ART_KINDS[ai.artKind].label.toLowerCase()}` : ''}{ai.notes ? ` — ${ai.notes}` : ''}</p>}
             <label className="block text-xs text-slate-300">Aplicar sobre
               <select value={base} onChange={(e) => setBase(e.target.value)} className="ml-2 rounded-lg border border-slate-700 bg-slate-900 p-1 text-xs" aria-label="Estilo base">
                 {STYLES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
