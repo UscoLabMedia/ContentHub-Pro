@@ -24,6 +24,7 @@ import { KokoroEngine } from './kokoro.ts';
 import { ProfileError, VoiceCloneEngine, VoiceProfiles } from './voiceclone.ts';
 import { azureProvider, edgeProvider, fakeEdgeProvider, validAzure, type AzureConfig } from './voice-online.ts';
 import { buildSfxTrack, sfxTrackPath } from './sfx.ts';
+import { parseSeed } from '@chp/core';
 import { generateImage, imagegenStatus } from './imagegen.ts';
 import { downloadMusic, generateMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
 import { ART_MIME, artExists, artPath, artUrl, downloadArt, saveDrawn } from './art.ts';
@@ -857,7 +858,8 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/art/generate' && req.method === 'POST') {
       const b = await readBody(req);
       try {
-        return json(res, 200, { art: await generateImage(DATA_DIR, String(b.query ?? '').slice(0, 80), b.look === 'paper' ? 'paper' : 'flat') });
+        const ref = typeof b.ref === 'string' && b.ref ? Buffer.from(b.ref, 'base64') : null; // reference picture as base64 (checked in generateImage)
+        return json(res, 200, { art: await generateImage(DATA_DIR, String(b.query ?? '').slice(0, 80), b.look === 'paper' ? 'paper' : 'flat', { seed: parseSeed(b.seed), ref, strength: b.strength }) });
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No pude generar la imagen' });
       }

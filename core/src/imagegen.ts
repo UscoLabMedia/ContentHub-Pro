@@ -43,7 +43,17 @@ export function imagePrompt(query: string, look: ImageLook = 'flat'): string {
 }
 
 /** Command line arguments (no shell is involved: each one is passed as is). */
-export function sdArgs(o: { model: string; prompt: string; out: string; seed: number; settings: ImagegenSettings }): string[] {
+export function sdArgs(o: { model: string; prompt: string; out: string; seed: number; settings: ImagegenSettings; init?: string; strength?: number }): string[] {
   const s = o.settings;
-  return ['-m', o.model, '-p', o.prompt, '-n', NEGATIVE_PROMPT, '-o', o.out, '--steps', String(s.steps), '--cfg-scale', String(s.cfg), '-W', String(s.size), '-H', String(s.size), '-s', String(o.seed >>> 0), '--threads', '-1'];
+  const base = ['-m', o.model, '-p', o.prompt, '-n', NEGATIVE_PROMPT, '-o', o.out, '--steps', String(s.steps), '--cfg-scale', String(s.cfg), '-W', String(s.size), '-H', String(s.size), '-s', String(o.seed >>> 0), '--threads', '-1'];
+  // img2img: start from the reference picture; strength = how far it may move away from it (0.1 almost the same, 1 almost ignored)
+  return o.init ? [...base, '-i', o.init, '--strength', String(normalizeStrength(o.strength))] : base;
 }
+
+export const normalizeStrength = (n: unknown): number => Math.round(clamp(Number(n ?? 0.6), 0.1, 1) * 100) / 100;
+
+/** Seed typed by the person (blank or invalid = null, so the scene wording picks it). */
+export const parseSeed = (v: unknown): number | null => {
+  const n = typeof v === 'number' || (typeof v === 'string' && v.trim() !== '') ? Number(v) : NaN;
+  return Number.isInteger(n) && n >= 0 && n <= 0xffffffff ? n : null;
+};

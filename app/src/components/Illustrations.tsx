@@ -8,6 +8,16 @@ import { type P } from './ui.tsx';
 const secondary = 'rounded-lg border border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-800 disabled:opacity-40';
 const fileUrl = (a: Pick<ArtRef, 'id' | 'ext'>) => `/api/art/${a.id}.${a.ext}?s=${getToken()}`;
 
+interface GenOpts {
+  prompt: string;
+  seed: string;
+  ref: string; // base64 of the reference picture, '' = none
+  refName: string;
+  strength: number;
+}
+const NO_OPTS: GenOpts = { prompt: '', seed: '', ref: '', refName: '', strength: 0.6 };
+const field = 'w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200';
+
 interface Info {
   query: string;
   draw: string;
@@ -24,6 +34,18 @@ export function Illustrations({ project, set }: P) {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [gen, setGen] = useState<{ installed: boolean; dir: string } | null>(null);
+  // Per-scene options for the local engine; blank = automatic (prompt from the scene, seed from its wording, no reference).
+  const [go, setGo] = useState<Record<string, GenOpts>>({});
+  const opt = (k: string): GenOpts => go[k] ?? NO_OPTS;
+  const setOpt = (k: string, patch: Partial<GenOpts>) => setGo((p) => ({ ...p, [k]: { ...(p[k] ?? NO_OPTS), ...patch } }));
+  const pickRef = (k: string, f: File | undefined) => {
+    if (!f) return setOpt(k, { ref: '', refName: '' });
+    if (!/^image\/(png|jpeg)$/.test(f.type) || f.size > 8 * 1024 * 1024) return setErr('La referencia debe ser PNG o JPG de menos de 8 MB');
+    setErr('');
+    const r = new FileReader();
+    r.onload = () => setOpt(k, { ref: String(r.result).split(',')[1] ?? '', refName: f.name });
+    r.readAsDataURL(f);
+  };
   useEffect(() => {
     api<{ installed: boolean; dir: string }>('/api/imagegen/status').then(setGen).catch(() => {});
   }, []);
@@ -115,10 +137,11 @@ export function Illustrations({ project, set }: P) {
     try {
       let i = info[key];
       if (!i) i = (await queries())[key];
-      const query = i?.query || text.slice(0, 60);
+      const o = opt(key);
+      const query = o.prompt.trim() || i?.query || text.slice(0, 60);
       const look = style.paperCut ?? style.background === 'paper' ? 'paper' : 'flat';
       setInfo((p) => (p[key] ? { ...p, [key]: { ...p[key]!, cands: null } } : p));
-      put({ [key]: (await api<{ art: ArtRef }>('/api/art/generate', { method: 'POST', json: { query, look } })).art });
+      put({ [key]: (await api<{ art: ArtRef }>('/api/art/generate', { method: 'POST', json: { query, look, seed: o.seed, ref: o.ref, strength: o.strength } })).art });
       setMsg('Imagen generada y puesta en la escena.');
     } catch (e) {
       setErr((e as Error).message);
@@ -179,6 +202,31 @@ export function Illustrations({ project, set }: P) {
                     {gen?.installed && <button className={secondary} disabled={!!busy} onClick={() => void generate(k, sc.text)} title="Genera una imagen nueva en tu PC con el motor local">Generar imagen (local)</button>}
                     {a && <button className={secondary} disabled={!!busy} onClick={() => put({ [k]: null })} aria-label={`Quitar ilustración ${i + 1}`}>✕</button>}
                   </div>
+                  {gen?.installed && (
+                    <details className="mt-1 text-[11px] text-slate-400">
+                      <summary className="cursor-pointer text-slate-300">Opciones de la imagen local</summary>
+                      <div className="mt-1 space-y-2">
+                        <label className="block">Qué dibujar (en inglés funciona mejor; vacío = automático)
+                          <input className={field} maxLength={80} value={opt(k).prompt} onChange={(e) => setOpt(k, { prompt: e.target.value })} placeholder="a red fox in a forest" />
+                        </label>
+                        <label className="block">Semilla (vacía = automática; la misma semilla repite la imagen)
+                          <span className="flex gap-1">
+                            <input className={field} inputMode="numeric" value={opt(k).seed} onChange={(e) => setOpt(k, { seed: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="automática" />
+                            <button type="button" className={secondary} onClick={() => setOpt(k, { seed: String(Math.floor(Math.random() * 4294967296)) })} title="Semilla al azar">🎲</button>
+                          </span>
+                        </label>
+                        <div>
+                          Imagen de referencia (PNG o JPG, máx. 8 MB)
+                          <input type="file" accept="image/png,image/jpeg" className="mt-1 block text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-xs file:text-white" aria-label="Imagen de referencia" onChange={(e) => pickRef(k, e.target.files?.[0])} />
+                          {opt(k).ref && (
+                            <label className="mt-1 block">Parecido a «{opt(k).refName}»: {Math.round((1 - opt(k).strength) * 100)}%
+                              <input type="range" min={0.1} max={1} step={0.05} value={opt(k).strength} onChange={(e) => setOpt(k, { strength: Number(e.target.value) })} className="w-full" />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </details>
+                  )}
                 </div>
               </div>
               {cands && cands.length > 0 && (
