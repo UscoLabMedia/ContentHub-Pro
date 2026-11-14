@@ -58,11 +58,21 @@ export async function toWav16k(input: string, outWav: string): Promise<void> {
   await runFfmpeg(['-y', '-i', input, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', outWav]);
 }
 
-const EXE_NAMES = ['whisper-cli.exe', 'main.exe', 'whisper-cli'];
+// In order of preference: in recent whisper.cpp packages `main.exe` is only a "deprecated" notice that exits with an error.
+const EXE_NAMES = ['whisper-cli.exe', 'whisper-cli', 'main.exe'];
+
+/** The whisper.cpp program inside `dir`: the first name of the list that exists, wherever it is in the folder tree. */
+export async function findWhisperExe(dir: string): Promise<string | null> {
+  for (const name of EXE_NAMES) {
+    const f = await findFile(dir, [name]);
+    if (f) return f;
+  }
+  return null;
+}
 
 async function ensureExe(base: string, onPct: Progress): Promise<string> {
   const binDir = join(base, 'bin');
-  const found = await findFile(binDir, EXE_NAMES);
+  const found = await findWhisperExe(binDir);
   if (found) return found;
   if (process.platform !== 'win32') return 'whisper-cli'; // expects a user-installed binary on PATH
   onPct(6, 'Descargando motor de transcripción (una sola vez)');
@@ -83,7 +93,7 @@ async function ensureExe(base: string, onPct: Progress): Promise<string> {
   if (!ok) throw new Error(`No pude descargar el motor de transcripción (whisper.cpp) para Windows: ${lastError}. Revisa tu conexión y reintenta en unos minutos; o descarga ${WINDOWS_ZIP} desde https://github.com/ggml-org/whisper.cpp/releases y descomprímelo en ${binDir}`);
   await mkdir(binDir, { recursive: true });
   await extractArchive(zip, binDir);
-  const exe = await findFile(binDir, EXE_NAMES);
+  const exe = await findWhisperExe(binDir);
   if (!exe) throw new Error('El paquete de whisper.cpp no contiene whisper-cli.exe');
   return exe;
 }

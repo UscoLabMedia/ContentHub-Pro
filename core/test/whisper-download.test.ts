@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { WINDOWS_ZIP, pickWindowsAsset, windowsZipCandidates } from '../src/index.ts';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { WINDOWS_ZIP, findWhisperExe, pickWindowsAsset, windowsZipCandidates } from '../src/index.ts';
 
 const asset = (name: string, tag = 'v1') => ({ name, browser_download_url: `https://github.com/ggml-org/whisper.cpp/releases/download/${tag}/${name}` });
 const DIRECT = `https://github.com/ggml-org/whisper.cpp/releases/latest/download/${WINDOWS_ZIP}`;
@@ -22,5 +25,21 @@ describe('whisper.cpp download for Windows', () => {
   it('still has the direct link when GitHub API did not answer (rate limit, no network)', () => {
     expect(windowsZipCandidates(null, null)).toEqual([DIRECT]);
     expect(windowsZipCandidates({ message: 'API rate limit exceeded' } as never, { message: 'x' } as never)).toEqual([DIRECT]);
+  });
+});
+
+describe('whisper.cpp program inside the downloaded package', () => {
+  it('prefers whisper-cli.exe over main.exe (a "deprecated" notice that exits with an error)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'chp-whisper-'));
+    try {
+      await mkdir(join(dir, 'Release'), { recursive: true });
+      expect(await findWhisperExe(dir)).toBeNull();
+      await writeFile(join(dir, 'Release', 'main.exe'), '');
+      expect(await findWhisperExe(dir)).toBe(join(dir, 'Release', 'main.exe')); // old packages only had main.exe
+      await writeFile(join(dir, 'Release', 'whisper-cli.exe'), '');
+      expect(await findWhisperExe(dir)).toBe(join(dir, 'Release', 'whisper-cli.exe'));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

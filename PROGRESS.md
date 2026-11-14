@@ -1,6 +1,6 @@
 # PROGRESS
 
-Estado del proyecto. Estado vigente: **`main`** (PRs #1–#22 fusionados). Cada fase nueva va en su propia rama y PR. Actualizar en cada PR.
+Estado del proyecto. Estado vigente: **`main`** (PRs #1–#27 fusionados; #28 en revisión). Cada fase nueva va en su propia rama y PR. Actualizar en cada PR.
 
 ## PRs fusionados
 
@@ -64,6 +64,14 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#22 fusionados). Cada 
 
 - Sin Windows ni red en la sesión: no probados Piper real, SAPI, confianza de whisper.cpp real, descarga de OCR, búsquedas reales (Google/Wikipedia/OpenAlex/datos.gov.co) ni verificación de páginas reales.
 - Análisis de referencia: los movimientos de cámara suaves se leen como «still». Subtítulos: la medición local funciona mejor con texto blanco, amarillo u oscuro sobre otro fondo; la tipografía se aproxima con la fuente libre más parecida. Las fuentes propias no viajan con la bóveda exportada: hay que subirlas en cada PC.
+
+## Instalación y arranque (correcciones #24–#28, tras la primera prueba real en Windows y Codespaces)
+
+- Codespaces: `whisper-cli` (whisper.cpp v1.9.5) se compila solo al crear el Codespace (`.devcontainer/install-whisper.sh`, #24). El servidor solo escucha en `127.0.0.1`: el puerto 8787 debe quedar «Private».
+- `Instalar-ContentHub.bat` usa la última marca `#PS1#` (#25): antes PowerShell ejecutaba también las líneas de CMD (errores rojos inofensivos y una pausa extra).
+- `ContentHub.bat` pone las carpetas habituales de Node y Git al principio del PATH y comprueba con `node -v` (#27): en un PC con una comilla suelta en el PATH del sistema, `where node` lo encontraba pero CMD no podía ejecutarlo.
+- whisper.cpp en Windows: la descarga prueba la última release, las 10 anteriores y el enlace directo sin API (#26); se usa `whisper-cli.exe` y nunca `main.exe`, que en los paquetes recientes es solo un aviso de «obsoleto» que termina con error (#28).
+- Ninguna de estas correcciones se probó en Windows desde la sesión (no hay Windows): se dedujeron de las capturas del usuario. El instalador necesita `winget`; sin él hay que instalar Git y Node a mano.
 
 ## Tareas del usuario
 
