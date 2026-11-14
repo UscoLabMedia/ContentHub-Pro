@@ -1,21 +1,21 @@
 # PROGRESS
 
-Estado del proyecto. Rama vigente de la pila: **`feat/subtitle-style`** (PR #10). Actualizar en cada PR.
+Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada fase nueva va en su propia rama y PR. Actualizar en cada PR.
 
-## Pila de PRs (fusionar en este orden; cada uno apunta al anterior)
+## PRs fusionados
 
 | PR | Rama | Contenido | Estado |
 |----|------|-----------|--------|
-| #1 | `feat/production-publish-analysis` → `main` | Pasos 6-10: producción, render, publicación, análisis | abierto |
-| #2 | `feat/voice-radar-selftest` | Voces gratuitas, radar de datos con fuentes, «Probar todo» | abierto |
-| #3 | `feat/transcript-review` | Revisión de transcripción con audio (cifrado, temporal) | abierto |
-| #4 | `feat/deliverables` | Entregables elegibles: largo, Shorts, miniatura, descripción, voz, subtítulos | abierto |
-| #5 | `feat/source-verification` | Modo documental: búsqueda, comprobación local, puerta, créditos | abierto |
-| #6 | `feat/free-source-search` | Búsqueda gratuita (Wikipedia, OpenAlex, datos abiertos) antes de IA | abierto |
-| #7 | `feat/visual-engine` | Motor visual parte 1: cámara, capas, karaoke, números gigantes, estilos | abierto |
-| #8 | `feat/reference-analysis` | Estilo desde video de referencia: análisis local + «Afinar con IA» | abierto |
-| #9 | `feat/illustrations` | Ilustraciones por escena: búsqueda libre (PD/CC0/CC BY) → SVG de Claude; créditos | abierto |
-| #10 | `feat/subtitle-style` | Subtítulos: 10 fuentes libres + fuente propia cifrada, 8 animaciones que rotan por escena, copiar de un video de referencia (local + «Afinar con IA») | abierto |
+| #1 | `feat/production-publish-analysis` → `main` | Pasos 6-10: producción, render, publicación, análisis | fusionado |
+| #2 | `feat/voice-radar-selftest` | Voces gratuitas, radar de datos con fuentes, «Probar todo» | fusionado |
+| #3 | `feat/transcript-review` | Revisión de transcripción con audio (cifrado, temporal) | fusionado |
+| #4 | `feat/deliverables` | Entregables elegibles: largo, Shorts, miniatura, descripción, voz, subtítulos | fusionado |
+| #5 | `feat/source-verification` | Modo documental: búsqueda, comprobación local, puerta, créditos | fusionado |
+| #6 | `feat/free-source-search` | Búsqueda gratuita (Wikipedia, OpenAlex, datos abiertos) antes de IA | fusionado |
+| #7 | `feat/visual-engine` | Motor visual parte 1: cámara, capas, karaoke, números gigantes, estilos | fusionado |
+| #8 | `feat/reference-analysis` | Estilo desde video de referencia: análisis local + «Afinar con IA» | fusionado |
+| #9 | `feat/illustrations` | Ilustraciones por escena: búsqueda libre (PD/CC0/CC BY) → SVG de Claude; créditos | fusionado |
+| #10 | `feat/subtitle-style` | Subtítulos: 10 fuentes libres + fuente propia cifrada, 8 animaciones que rotan por escena, copiar de un video de referencia (local + «Afinar con IA») | fusionado |
 
 ## Decisiones tomadas (no volver a preguntar)
 
@@ -42,6 +42,4 @@ Estado del proyecto. Rama vigente de la pila: **`feat/subtitle-style`** (PR #10)
 
 ## Tareas del usuario
 
-- Revisar y fusionar PRs #1–#8 en orden.
-- Borrar ramas viejas: `git push origin --delete feat/scaffold feat/steps-1-5 feat/sources-and-engine`.
-- Probar «Probar todo» en Windows. El instalador clona `main`.
+- Probar «Probar todo» en Windows (el instalador clona `main`, que ya tiene todo).
