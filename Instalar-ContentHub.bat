@@ -6,7 +6,7 @@ rem  Instala Git y Node.js si faltan, descarga el proyecto, crea un acceso
 rem  directo en el Escritorio y abre la app.
 rem ============================================================================
 title Instalar ContentHub Pro
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$s=[IO.File]::ReadAllText('%~f0'); iex $s.Substring($s.IndexOf('#PS1#'))"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$s=[IO.File]::ReadAllText('%~f0'); iex $s.Substring($s.LastIndexOf('#PS1#'))"
 echo.
 pause
 exit /b
