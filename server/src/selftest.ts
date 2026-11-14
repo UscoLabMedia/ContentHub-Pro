@@ -15,7 +15,7 @@ import { edgeProvider } from './voice-online.ts';
 import { KokoroEngine } from './kokoro.ts';
 import { cloneDir } from './voiceclone.ts';
 import { cutClip, dropOriginal, hasOriginal, keepOriginal } from './original.ts';
-import { searchBroll, FONTS, SFX_LIBRARY, MOODS, synthMusic, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
+import { applyOps, searchBroll, FONTS, SFX_LIBRARY, MOODS, synthMusic, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
 import { existsSync } from 'node:fs';
 
 export type Status = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skip';
@@ -170,6 +170,13 @@ export const CHECKS: Check[] = [
   { id: 'sfx', label: 'Efectos de sonido (generados en tu PC)', group: 'Video', run: async () => {
     for (const x of SFX_LIBRARY) if (synthSfx(x.id).length < 100) throw new Error(`El sonido «${x.label}» salió vacío`);
     return `${SFX_LIBRARY.length} sonidos generados correctamente`;
+  } },
+  { id: 'assistant', label: 'Asistente de cada paso (reglas de seguridad)', group: 'Video', run: async () => {
+    const p = { topic: 'a', production: { scenes: [{ text: 'Uno', durationSec: 3 }] } };
+    const ok = applyOps(p, 7, [{ op: 'set', path: 'production.scenes.0.text', value: '"Dos"' }]);
+    const no = applyOps(p, 6, [{ op: 'set', path: 'production.scenes.0.text', value: '"Dos"' }]);
+    if (ok.applied.length !== 1 || no.applied.length !== 0) throw new Error('El asistente no respeta los límites de cada paso');
+    return 'Cada paso solo puede cambiar lo suyo';
   } },
   { id: 'music-gen', label: 'Música generada (sin licencias, en tu PC)', group: 'Video', run: async () => {
     for (const m of MOODS) if (synthMusic(m.id).length < 44100 * 10) throw new Error(`La música «${m.label}» salió vacía`);

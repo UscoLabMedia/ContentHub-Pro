@@ -23,6 +23,7 @@
     "./music": "./src/music.ts",
     "./broll": "./src/broll.ts",
     "./sfx": "./src/sfx.ts",
+    "./assistant": "./src/assistant.ts",
     "./music-synth": "./src/music-synth.ts",
     "./voice-clone": "./src/voice/clone.ts"
   },

@@ -144,6 +144,12 @@ export const MusicMoodOut = z.object({ mood: z.enum(['documental', 'inspirador',
 export const ArtQueriesOut = z.object({
   scenes: z.array(z.object({ key: z.string(), query: z.string().max(60), draw: z.string().max(160) })).max(40),
 });
+/** The step assistant: a short reply plus edit operations (value is JSON text so the schema stays simple for every engine). */
+export const AssistantOut = z.object({
+  onTopic: z.boolean(),
+  reply: z.string().max(500),
+  ops: z.array(z.object({ op: z.enum(['set', 'insert', 'remove']), path: z.string().max(120), value: z.string().max(6000).optional() })).max(20),
+});
 export const DrawOut = z.object({ svg: z.string().max(16000) });
 export const BeatWordsOut = z.object({
   scenes: z.array(z.object({ key: z.string(), words: z.array(z.string().max(30)).max(2) })).max(60),
@@ -184,4 +190,6 @@ export const OUTPUT_SCHEMAS = {
   subtitleFromSheet: SubtitleSheetOut,
   drawIllustration: DrawOut,
   beatWords: BeatWordsOut,
+  stepAssist: AssistantOut,
+  stepAssistScript: AssistantOut,
 } as const;

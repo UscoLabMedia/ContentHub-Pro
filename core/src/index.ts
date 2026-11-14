@@ -22,6 +22,7 @@ export * from './music.ts';
 export * from './broll.ts';
 export * from './sfx.ts';
 export * from './sfx-synth.ts';
+export * from './assistant.ts';
 export * from './music-synth.ts';
 export * from './voice/index.ts';
 export * from './radar/index.ts';
