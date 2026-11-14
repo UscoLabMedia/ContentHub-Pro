@@ -166,3 +166,11 @@ En el paso 6 hay voces neuronales en español **en línea**, además de las loca
 - **Azure AI Speech** (oficial, permite uso comercial): crea un recurso «Speech» gratis (capa F0, unos 500 000 caracteres al mes), pega la clave y la región; se guardan cifradas en tu bóveda y nunca se muestran de nuevo. Permite **estilos o emociones** (alegre, triste, susurro…).
 
 Ajustes para cualquier voz: **velocidad**, **tono** (±6 semitonos; en las voces locales se aplica con filtros de audio) y, en Azure, **estilo**. En el guion puedes escribir `[pausa]` o `[pausa 1.5s]` para un silencio y `*palabra*` para darle énfasis; las marcas no salen en pantalla ni en los subtítulos.
+
+## Voces locales gratis: Kokoro
+
+En el paso 6, filtro **Locales**: **Dora**, **Alex** y **Santa** (Kokoro, 82 millones de parámetros, pesos Apache 2.0; motor `kokoro-onnx`, MIT). Funcionan **sin internet y sin clave**, corren en CPU (unas 3 veces más rápido que el tiempo real en las pruebas) y aceptan velocidad, tono y las marcas `[pausa]` y `*énfasis*`.
+
+La primera vez que pides una muestra se instalan solas (unos 220 MB, una sola vez) en tu carpeta de datos: un Python privado (si no tienes Python 3.10–3.13, se descarga uno con `uv`, sin permisos de administrador), el paquete `kokoro-onnx`, el modelo y las voces (con comprobación de integridad SHA-256). Un proceso pequeño mantiene el modelo cargado y se apaga solo tras 5 minutos sin uso. Nada de tu texto sale de tu PC.
+
+Licencias: el motor `espeak-ng` que usa Kokoro para pronunciar es GPL-3.0; se instala en tu PC como dependencia y no se redistribuye con este proyecto. Revisa la ficha oficial del modelo antes de uso comercial.

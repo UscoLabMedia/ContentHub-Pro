@@ -19,6 +19,7 @@ import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
 import { analyzeReference } from './reference.ts';
 import { brollExists, brollPath, brollUrl, downloadBroll } from './broll.ts';
+import { KokoroEngine } from './kokoro.ts';
 import { azureProvider, edgeProvider, fakeEdgeProvider, validAzure, type AzureConfig } from './voice-online.ts';
 import { buildSfxTrack, sfxTrackPath } from './sfx.ts';
 import { downloadMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
@@ -45,7 +46,8 @@ const onlineProviders = (): OnlineProvider[] => {
   const a = azureConfig();
   return [edgeSvc, ...(a ? [azureProvider(a, process.env.CHP_AZURE_BASE)] : [])];
 };
-const tts = new Tts(DATA_DIR, process.env.CHP_PIPER_BIN, onlineProviders);
+const kokoro = new KokoroEngine(DATA_DIR, ROOT);
+const tts = new Tts(DATA_DIR, process.env.CHP_PIPER_BIN, onlineProviders, kokoro);
 let radarCache: { at: number; data: Awaited<ReturnType<typeof fetchRadar>> } | null = null;
 
 interface VoiceJob {

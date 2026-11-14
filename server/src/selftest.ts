@@ -12,6 +12,7 @@ import {
 import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
 import { checkSource } from './verify.ts';
 import { edgeProvider } from './voice-online.ts';
+import { KokoroEngine } from './kokoro.ts';
 import { searchBroll, FONTS, SFX_LIBRARY, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
 import { existsSync } from 'node:fs';
 
@@ -174,6 +175,18 @@ export const CHECKS: Check[] = [
       return `Funciona (${Math.round(r.wav.length / 1024)} KB de audio${r.words?.length ? ', con tiempos por palabra' : ''})`;
     } catch (e) {
       throw new Warn(`${e instanceof Error ? e.message : 'No respondió'} Si falla, usa Azure o las voces locales.`);
+    }
+  } },
+  { id: 'kokoro', label: 'Voz local Kokoro (gratis, sin internet)', group: 'Voz', run: async (c) => {
+    const k = new KokoroEngine(c.dataDir, c.root, 30_000);
+    if (!k.installed()) throw new Warn('Aún no está instalada: se instala sola (unos 220 MB) la primera vez que escuchas una muestra de Dora, Alex o Santa en el paso 6');
+    const file = join(c.dataDir, 'tts-cache', `selftest-kokoro-${Date.now()}.wav`);
+    try {
+      await k.synth('ef_dora', 'Prueba de voz.', 1, file, () => {});
+      return `Funciona (${Math.round((await stat(file)).size / 1024)} KB de audio)`;
+    } finally {
+      k.stop();
+      await rm(file, { force: true });
     }
   } },
   { id: 'thumbnail', label: 'Miniatura (imagen 1280×720)', group: 'Video', run: async (c) => {

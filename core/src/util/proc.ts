@@ -33,21 +33,43 @@ export function run(cmd: string, args: string[], o: RunOptions = {}): Promise<st
   });
 }
 
-export async function download(url: string, dest: string, onPct?: (p: number) => void): Promise<void> {
-  const res = await fetch(url, { redirect: 'follow', headers: { 'user-agent': 'contenthub-pro' } }).catch(() => {
-    throw new Error(`No pude descargar ${url.split('/').pop()}: revisa tu conexión a internet`);
-  });
-  if (!res.ok || !res.body) throw new Error(`Download failed (${res.status}) ${url}`);
-  const total = Number(res.headers.get('content-length') ?? 0);
-  let got = 0;
-  const body = Readable.fromWeb(res.body as never);
-  body.on('data', (c: Buffer) => {
-    got += c.length;
-    if (total) onPct?.(Math.round((got / total) * 100));
-  });
-  await mkdir(dirname(dest), { recursive: true });
-  await pipeline(body, createWriteStream(`${dest}.part`));
-  await rename(`${dest}.part`, dest);
+/** Downloads a file. A transfer that goes quiet for `idleMs` is abandoned and retried (large model files on slow links). */
+export async function download(url: string, dest: string, onPct?: (p: number) => void, o: { idleMs?: number; retries?: number } = {}): Promise<void> {
+  const idleMs = o.idleMs ?? 45_000;
+  const attempts = (o.retries ?? 2) + 1;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const ctl = new AbortController();
+    let timer = setTimeout(() => ctl.abort(), idleMs);
+    const bump = () => { clearTimeout(timer); timer = setTimeout(() => ctl.abort(), idleMs); };
+    try {
+      const res = await fetch(url, { redirect: 'follow', headers: { 'user-agent': 'contenthub-pro' }, signal: ctl.signal }).catch(() => {
+        throw new Error(`No pude descargar ${url.split('/').pop()}: revisa tu conexión a internet`);
+      });
+      if (!res.ok || !res.body) throw new Error(`Download failed (${res.status}) ${url}`);
+      bump();
+      const total = Number(res.headers.get('content-length') ?? 0);
+      let got = 0;
+      await mkdir(dirname(dest), { recursive: true }); // before the stream starts flowing, or its first chunks are lost
+      const body = Readable.fromWeb(res.body as never);
+      body.on('data', (c: Buffer) => {
+        got += c.length;
+        bump();
+        if (total) onPct?.(Math.round((got / total) * 100));
+      });
+      await pipeline(body, createWriteStream(`${dest}.part`));
+      if (total && got < total) throw new Error('La descarga quedó incompleta');
+      await rename(`${dest}.part`, dest);
+      clearTimeout(timer);
+      return;
+    } catch (e) {
+      clearTimeout(timer);
+      await rm(`${dest}.part`, { force: true });
+      lastError = ctl.signal.aborted ? new Error(`La descarga de ${url.split('/').pop()} se quedó sin datos`) : e;
+      if (attempt < attempts) await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('La descarga falló');
 }
 
 export async function findFile(dir: string, names: string[]): Promise<string | null> {
