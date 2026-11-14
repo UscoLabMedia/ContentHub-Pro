@@ -82,6 +82,8 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#33 fusionados). Cada 
 - whisper.cpp en Windows: la descarga prueba la última release, las 10 anteriores y el enlace directo sin API (#26); se usa `whisper-cli.exe` y nunca `main.exe`, que en los paquetes recientes es solo un aviso de «obsoleto» que termina con error (#28).
 - Ninguna de estas correcciones se probó en Windows desde la sesión (no hay Windows): se dedujeron de las capturas del usuario. El instalador necesita `winget`; sin él hay que instalar Git y Node a mano.
 
+- Paso 7 (Producción): la fila de cada escena salía rota (cuadro de texto diminuto y duración a todo el ancho) porque la clase `field` trae `w-full` y `w-16` no la vencía; corregido con `!w-20` (`fix/scene-row-layout`). Era un defecto antiguo que nadie había visto en pantalla real; la lección: los cambios de interfaz se revisan mirando la imagen, no solo los valores.
+
 ## Tareas del usuario
 
 - Probar «Probar todo» en Windows (el instalador clona `main`, que ya tiene todo).
