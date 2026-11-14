@@ -10,7 +10,7 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
@@ -18,6 +18,7 @@ import { isRenderId, renderFile, renderFrame, renderStatus, startRender } from '
 import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
 import { analyzeReference } from './reference.ts';
+import { brollExists, brollPath, brollUrl, downloadBroll } from './broll.ts';
 import { buildSfxTrack, sfxTrackPath } from './sfx.ts';
 import { downloadMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
 import { ART_MIME, artExists, artPath, artUrl, downloadArt, saveDrawn } from './art.ts';
@@ -95,13 +96,24 @@ const sfxFor = (s: { vault: Vault; token: string }): { config: ReturnType<typeof
   const config = normalizeSfx(s.vault.get<{ sfx?: Partial<ReturnType<typeof normalizeSfx>> }>('project')?.sfx);
   return config.enabled ? { config, url: (hash) => `http://127.0.0.1:${PORT}/api/sfx/${hash}.wav?s=${s.token}` } : undefined;
 };
+/** B-roll chosen per scene wording (saved in the project) and the free API keys (write-only, kept in the vault). */
+const projectBroll = (s: { vault: Vault }): Record<string, BrollRef> => s.vault.get<{ broll?: Record<string, BrollRef> }>('project')?.broll ?? {};
+const brollKeys = (s: { vault: Vault }): BrollKeys => s.vault.get<BrollKeys>('brollKeys') ?? {};
+/** Adds each scene's B-roll URL (served by this server to the local render only). */
+const withBroll = <T extends { text: string; durationSec: number }>(scenes: T[], s: { vault: Vault; token: string }): (T & { broll?: { url: string; durationSec: number } })[] => {
+  const all = projectBroll(s);
+  return scenes.map((sc) => {
+    const b = all[textKey(sc.text)];
+    return b && brollExists(DATA_DIR, b.id) ? { ...sc, broll: { url: brollUrl(PORT, s.token, b.id), durationSec: b.durationSec } } : sc;
+  });
+};
 /** Background music chosen in the project (a track + its mix). */
 const projectMusic = (s: { vault: Vault }): { track: MusicRef | null; mix?: Partial<MusicMix> } => s.vault.get<{ music?: { track: MusicRef | null; mix?: Partial<MusicMix> } }>('project')?.music ?? { track: null };
 const musicFor = (s: { vault: Vault; token: string }): { url: string } & MusicMix | undefined => {
   const m = projectMusic(s);
   return m.track && musicExists(DATA_DIR, m.track.id) ? { url: musicUrl(PORT, s.token, m.track.id), ...normalizeMix(m.mix) } : undefined;
 };
-const creditsWithArt = (scenes: { text: string }[], s: { vault: Vault }) => ({ ...creditsFrom(scenes, projectChecks(s)), images: artCredits(scenes, projectArt(s), textKey), music: musicFor(s as { vault: Vault; token: string }) ? musicCredits(projectMusic(s).track) : [] });
+const creditsWithArt = (scenes: { text: string }[], s: { vault: Vault }) => ({ ...creditsFrom(scenes, projectChecks(s)), images: artCredits(scenes, projectArt(s), textKey), music: musicFor(s as { vault: Vault; token: string }) ? musicCredits(projectMusic(s).track) : [], video: brollCredits(scenes, projectBroll(s), textKey) });
 const pendingMessage = (n: number) => `Hay ${n} escena(s) sin verificar. Verifica sus fuentes o márcalas como opinión en el paso de producción.`;
 const selftest: { running: boolean; full: boolean; results: CheckResult[] } = { running: false, full: false, results: [] };
 
@@ -318,6 +330,11 @@ const server = createServer(async (req, res) => {
       }
       return sendBytes(req, res, buf, 'audio/mpeg');
     }
+    const brm = url.pathname.match(/^\/api\/broll\/([a-f0-9]{16})\.mp4$/);
+    if (brm && req.method === 'GET') {
+      if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
+      return brollExists(DATA_DIR, brm[1]!) ? sendFile(req, res, brollPath(DATA_DIR, brm[1]!), 'video/mp4') : json(res, 404, { error: 'Not found' });
+    }
     const sfxm = url.pathname.match(/^\/api\/sfx\/([a-z0-9-]{3,40})\.wav$/);
     if (sfxm && req.method === 'GET') {
       if (!tokenOk(String(url.searchParams.get('s') ?? ''))) return json(res, 401, { error: 'Locked' });
@@ -455,7 +472,7 @@ const server = createServer(async (req, res) => {
       if (!spec.success) return json(res, 400, { error: 'Vista previa inválida' });
       const id = randomBytes(8).toString('hex');
       try {
-        await renderFrame({ ...spec.data, fonts: userFontsFor(spec.data.style, s), scenes: withArt(spec.data.scenes.slice(0, 1).map(({ text, durationSec }) => ({ text, durationSec })), s).map((x) => ({ ...x, speechSec: Math.min(x.durationSec - 0.5, 4) })) }, join(DATA_DIR, 'renders', `${id}.png`), DATA_DIR, ROOT);
+        await renderFrame({ ...spec.data, fonts: userFontsFor(spec.data.style, s), scenes: withBroll(withArt(spec.data.scenes.slice(0, 1).map(({ text, durationSec }) => ({ text, durationSec })), s), s).map((x) => ({ ...x, speechSec: Math.min(x.durationSec - 0.5, 4) })) }, join(DATA_DIR, 'renders', `${id}.png`), DATA_DIR, ROOT);
         return json(res, 200, { url: `/api/preview/${id}.png` });
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo generar la vista previa' });
@@ -515,6 +532,43 @@ const server = createServer(async (req, res) => {
         return json(res, 200, await s.gateway.run('subtitleFromSheet', `HOJA ${createHash('sha1').update(sheet).digest('hex')}`, { images: [file] }));
       } finally {
         await removeFile(file, { force: true });
+      }
+    }
+
+    // --- B-roll: free stock video (keys are write-only; nothing ever returns them) ---
+    if (url.pathname === '/api/broll/keys' && req.method === 'GET') {
+      const k = brollKeys(s);
+      return json(res, 200, { pexels: !!k.pexels, pixabay: !!k.pixabay });
+    }
+    if (url.pathname === '/api/broll/keys' && req.method === 'PUT') {
+      const b = await readBody(req);
+      const next: BrollKeys = { ...brollKeys(s) };
+      for (const name of ['pexels', 'pixabay'] as const) {
+        if (typeof b[name] !== 'string') continue;
+        const v = b[name].trim();
+        if (!v) delete next[name];
+        else if (/^[A-Za-z0-9_-]{10,120}$/.test(v)) next[name] = v;
+        else return json(res, 400, { error: `La clave de ${PROVIDER_LABEL[name]} no parece válida` });
+      }
+      s.vault.set('brollKeys', next);
+      await s.vault.save();
+      return json(res, 200, { pexels: !!next.pexels, pixabay: !!next.pixabay });
+    }
+    if (url.pathname === '/api/broll/search' && req.method === 'POST') {
+      const b = await readBody(req);
+      const q = String(b.query ?? '').replace(/[^\p{L}\p{N} ]/gu, ' ').trim().slice(0, 80);
+      // Test seam: CHP_BROLL_TEST_URL replaces the public providers with a local fixture (never set in normal use).
+      const test = process.env.CHP_BROLL_TEST_URL;
+      const candidates = test ? ((await (await fetch(`${test}?q=${encodeURIComponent(q)}`)).json()) as BrollCandidate[]) : await searchBroll(q, { keys: brollKeys(s), portrait: b.portrait !== false });
+      return json(res, 200, { query: q, candidates });
+    }
+    if (url.pathname === '/api/broll/use' && req.method === 'POST') {
+      const c = (await readBody(req)).candidate as BrollCandidate | undefined;
+      if (!c || typeof c.url !== 'string' || typeof c.id !== 'string' || !(c.provider in PROVIDER_LABEL) || !['cc0', 'pdm', 'by', 'free', 'nasa'].includes(String(c.license))) return json(res, 400, { error: 'Video inválido o sin una licencia permitida' });
+      try {
+        return json(res, 200, { broll: await downloadBroll(DATA_DIR, { ...c, title: String(c.title ?? ''), author: String(c.author ?? ''), licenseLabel: String(c.licenseLabel ?? '').slice(0, 30) }) });
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No pude descargar el video' });
       }
     }
 
@@ -662,8 +716,8 @@ const server = createServer(async (req, res) => {
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
       const credits = creditsWithArt(baseScenes, s);
       const request: PackageRequest = {
-        card: credits.sources.length || credits.images.length || credits.music.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
-        items: b.items, scenes: withArt(baseScenes, s), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s), music: musicFor(s),
+        card: credits.sources.length || credits.images.length || credits.music.length || credits.video.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
+        items: b.items, scenes: withBroll(withArt(baseScenes, s), s), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s), music: musicFor(s),
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
         summary: String(b.summary ?? '').slice(0, 3000),
@@ -675,6 +729,7 @@ const server = createServer(async (req, res) => {
       if (credits.calcs.length) request.extra = [...(request.extra ?? []), 'Cálculos propios:', ...credits.calcs.map((c) => `- ${c}`)];
       if (credits.images.length) request.extra = [...(request.extra ?? []), 'Imágenes:', ...credits.images.map((c) => `- ${c}`)];
       if (credits.music.length) request.extra = [...(request.extra ?? []), 'Música:', ...credits.music.map((c) => `- ${c}`)];
+      if (credits.video.length) request.extra = [...(request.extra ?? []), 'Video:', ...credits.video.map((c) => `- ${c}`)];
       try {
         return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: voice ? {
           tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
@@ -700,8 +755,8 @@ const server = createServer(async (req, res) => {
       const g = gate(baseScenes, projectChecks(s));
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
       const credits = creditsWithArt(baseScenes, s);
-      const artScenes = withArt(baseScenes, s);
-      const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), music: musicFor(s), scenes: credits.sources.length || credits.images.length || credits.music.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
+      const artScenes = withBroll(withArt(baseScenes, s), s);
+      const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), music: musicFor(s), scenes: credits.sources.length || credits.images.length || credits.music.length || credits.video.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
         return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, voice ? {

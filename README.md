@@ -153,3 +153,7 @@ En el paso 7, sección **Música**: elige un ánimo (o «Sugerir con IA», una c
 ## Efectos de sonido
 
 En el paso 7, sección **Efectos de sonido** (apagados por defecto): se generan en tu PC, sin descargas ni licencias. Hay una **biblioteca** de 12 sonidos y 5 ambientes (toca ▶ para escucharlos). Tú eliges qué suena en cada momento: cambio de escena (con opción de alternar varios), número gigante, ilustración, y los subtítulos con **un sonido distinto por cada animación** (al entrar cada grupo de palabras o en cada palabra resaltada). El ambiente de fondo es muy suave y baja cuando habla la voz. «Escuchar los efectos de mi video» reproduce solo los efectos sobre la línea de tiempo de tu proyecto, sin renderizar.
+
+## Video de stock (B-roll)
+
+En el paso 7, sección **Video de stock**: por escena, busca 3 videos libres y elige uno como **fondo** (con el color de tu estilo encima para que los subtítulos se lean; se recorta a 30 s, va sin audio y se repite si es más corto que la escena). Fuentes sin clave: Wikimedia Commons, Internet Archive (dominio público, CC0, CC BY) y NASA. Con una **clave gratuita** (pégala una vez; se guarda cifrada y nunca se muestra) se suman Pexels y Pixabay, que dan mejor calidad de stock. Los CC BY y NASA salen en la pantalla final y en la descripción. Los términos de búsqueda salen de la misma consulta de IA que las ilustraciones (sin gasto extra).

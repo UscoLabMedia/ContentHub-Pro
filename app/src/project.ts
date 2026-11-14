@@ -3,6 +3,7 @@ import { PLATFORM_PRESET, toSpec, type Scene } from '@chp/core/production';
 import type { DeliverableId, ShortRange } from '@chp/core/deliverables';
 import { textKey, type SceneCheck } from '@chp/core/verification';
 import type { ArtRef } from '@chp/core/illustrations';
+import type { BrollRef } from '@chp/core/broll';
 import { DEFAULT_SFX, normalizeSfx, type SfxConfig } from '@chp/core/sfx';
 import { DEFAULT_MIX, type MusicMix, type MusicRef } from '@chp/core/music';
 import { DEFAULT_STYLE, type StyleProfile } from '@chp/core/style';
@@ -24,6 +25,8 @@ export interface Project {
   verification: Record<string, SceneCheck>;
   /** Illustration per scene wording (file kept by the server, see core/illustrations). */
   art: Record<string, ArtRef>;
+  /** Stock video (B-roll) as a scene's background, per scene wording. */
+  broll: Record<string, BrollRef>;
   /** Background music: the chosen track (mp3 kept by the server) and how it is mixed. */
   music: { track: MusicRef | null; mood: string; hint: string; mix: MusicMix };
   /** Sound effects: which sound plays on which event (see core/sfx). Off by default. */
@@ -58,6 +61,7 @@ export const EMPTY_PROJECT: Project = {
   voice: { mode: 'unset', voiceId: '', speed: 1 },
   verification: {},
   art: {},
+  broll: {},
   music: { track: null, mood: 'documental', hint: '', mix: DEFAULT_MIX },
   sfx: DEFAULT_SFX,
   production: { preset: '', themeIdx: 0, scenes: [], style: DEFAULT_STYLE },
@@ -70,7 +74,7 @@ export const defaultPreset = (p: Project): string => PLATFORM_PRESET[(p.platform
 export const presetOf = (p: Project): string => p.production.preset || defaultPreset(p);
 /** Narration settings sent with a render (null = silent video). */
 export const voiceOf = (p: Project) => (p.voice.mode === 'narrate' && p.voice.voiceId ? { id: p.voice.voiceId, speed: p.voice.speed } : null);
-export const specKey = (p: Project): string => JSON.stringify({ spec: toSpec(presetOf(p), p.production.scenes, p.production.themeIdx, p.production.style), voice: voiceOf(p), art: p.production.scenes.map((s) => p.art[textKey(s.text)]?.id ?? ''), music: p.music.track ? { id: p.music.track.id, mix: p.music.mix } : null, sfx: normalizeSfx(p.sfx) });
+export const specKey = (p: Project): string => JSON.stringify({ spec: toSpec(presetOf(p), p.production.scenes, p.production.themeIdx, p.production.style), voice: voiceOf(p), art: p.production.scenes.map((s) => p.art[textKey(s.text)]?.id ?? ''), music: p.music.track ? { id: p.music.track.id, mix: p.music.mix } : null, sfx: normalizeSfx(p.sfx), broll: p.production.scenes.map((s) => p.broll[textKey(s.text)]?.id ?? '') });
 
 let flushNow: (() => Promise<void>) | null = null;
 /** Saves any pending project change right now. Call before actions the server checks against the saved project. */
@@ -85,7 +89,7 @@ export function useProject() {
   useEffect(() => {
     api<{ project: Project | null }>('/api/project').then((r) => {
       const saved = r.project ?? ({} as Partial<Project>);
-      setProject({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
+      setProject({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, broll: { ...saved.broll }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
       loaded.current = true;
     });
   }, []);

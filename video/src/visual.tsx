@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { Easing, Img, interpolate, random, spring } from 'remotion';
+import { Easing, Img, Loop, OffthreadVideo, interpolate, random, spring } from 'remotion';
 import { animFor, captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
 import { captionGroups, formatCount, wordTimings, readingSeconds, type CameraKind, type HeroNumber, type StyleProfile } from '@chp/core/style';
 
@@ -113,6 +113,18 @@ export const Hero = ({ hero, style, frame, fps, width, height }: { hero: HeroNum
     <div style={{ position: 'absolute', left: 0, right: 0, top: portrait ? '16%' : '12%', display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${0.6 + 0.4 * enter})`, opacity: Math.min(1, enter * 1.4), filter: `blur(${(1 - Math.min(1, enter)) * 8}px)` }}>
       <div style={{ fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 900, fontSize: size, lineHeight: 1, color: style.palette.accent, textShadow: `0 ${size * 0.04}px 0 ${style.palette.fg}22`, letterSpacing: -2 }}>{formatCount(count, hero)}</div>
       {hero.unit && <div style={{ fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 800, fontSize: size * 0.34, color: style.palette.fg, opacity: 0.9, marginTop: size * 0.04 }}>{hero.unit}</div>}
+    </div>
+  );
+};
+
+/** Stock video as the scene's background: loops when shorter than the scene, silent, with a veil in the style's color so captions stay readable. */
+export const Broll = ({ broll, style, durationInFrames, fps }: { broll: { url: string; durationSec: number }; style: StyleProfile; durationInFrames: number; fps: number }) => {
+  const clip = Math.max(1, Math.round((broll.durationSec > 0 ? Math.min(broll.durationSec, 30) : durationInFrames / fps) * fps));
+  const video = <OffthreadVideo src={broll.url} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />;
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: style.palette.bg }}>
+      {clip < durationInFrames ? <Loop durationInFrames={clip}>{video}</Loop> : video}
+      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(${style.palette.bg}99, ${style.palette.bg}55 45%, ${style.palette.bg}99)` }} />
     </div>
   );
 };

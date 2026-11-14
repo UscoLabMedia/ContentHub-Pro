@@ -15,6 +15,7 @@
     "./illustrations": "./src/illustrations.ts",
     "./subtitles": "./src/subtitles.ts",
     "./music": "./src/music.ts",
+    "./broll": "./src/broll.ts",
     "./sfx": "./src/sfx.ts"
   },
   "scripts": {
