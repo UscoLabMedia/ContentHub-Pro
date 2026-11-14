@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
-  SAMPLE_TEXT, Vault, claudeCodeStatus, toSlideSpecs, createClaudeCodeClient, fetchRadar, piperAssetUrl, pdfToText,
+  SAMPLE_TEXT, Vault, claudeCodeStatus, toSlideSpecs, createProject, currentId, deleteProject, duplicateProject, exportEnvelope, importProject, listProjects, getProjectData, type KV, createClaudeCodeClient, fetchRadar, piperAssetUrl, pdfToText,
   run, runFfmpeg, toWav16k, transcribe, wavInfo, type BlobStorage, type Tts,
 } from '@chp/core';
 import { renderCarousel, renderFile, renderStatus, renderStill, startRender } from './render.ts';
@@ -203,6 +203,20 @@ export const CHECKS: Check[] = [
     const size = (await stat(out)).size;
     await rm(out, { force: true });
     return `PNG generado (${Math.round(size / 1024)} KB)`;
+  } },
+  { id: 'projects', label: 'Gestor de proyectos (crear, duplicar, exportar, eliminar)', group: 'Sistema', run: async () => {
+    const m = new Map<string, unknown>();
+    const kv: KV = { get: <T,>(k: string) => m.get(k) as T | undefined, set: (k, v) => void m.set(k, structuredClone(v)), delete: (k) => void m.delete(k) };
+    const a = currentId(kv);
+    const b = createProject(kv, 'Prueba B');
+    const copy = duplicateProject(kv, b.id);
+    const moved = importProject(kv, exportEnvelope('Importado', { topic: 'x' }));
+    if (!getProjectData(kv, moved.id)) throw new Error('El proyecto importado no se guardó');
+    deleteProject(kv, copy.id);
+    deleteProject(kv, a);
+    const left = listProjects(kv).items.length;
+    if (left !== 2) throw new Error(`Se esperaban 2 proyectos y hay ${left}`);
+    return 'Crear, duplicar, exportar/importar y eliminar funcionan';
   } },
   { id: 'carousel', label: 'Carrusel de Instagram (láminas 1080×1350)', group: 'Video', run: async (c) => {
     if (!c.full) throw new Skip('Solo en la prueba completa');

@@ -85,27 +85,42 @@ export const flushProject = async (): Promise<void> => {
   await flushNow?.();
 };
 
-/** Project state saved (encrypted) in the vault, debounced. */
-export function useProject() {
+/** A saved project (possibly from an older version, or empty) completed with the current defaults. */
+export const hydrate = (saved: Partial<Project>): Project => ({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, broll: { ...saved.broll }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
+
+/** State of one project saved (encrypted) in the vault, debounced. Changing `projectId` loads another project. */
+export function useProject(projectId: string) {
   const [project, setProject] = useState<Project | null>(null);
-  const loaded = useRef(false);
+  const loadedFor = useRef<string | null>(null);
+  const justLoaded = useRef(false);
   useEffect(() => {
-    api<{ project: Project | null }>('/api/project').then((r) => {
-      const saved = r.project ?? ({} as Partial<Project>);
-      setProject({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, broll: { ...saved.broll }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
-      loaded.current = true;
+    let live = true;
+    setProject(null);
+    loadedFor.current = null;
+    api<{ project: Project | null }>(`/api/projects/${projectId}`).then((r) => {
+      if (!live) return;
+      justLoaded.current = true; // opening a project is not an edit: it must not change its "updated" date
+      setProject(hydrate(r.project ?? {}));
+      loadedFor.current = projectId;
     });
-  }, []);
+    return () => {
+      live = false;
+    };
+  }, [projectId]);
   useEffect(() => {
-    if (!project || !loaded.current) return;
+    if (!project || loadedFor.current !== projectId) return;
+    if (justLoaded.current) {
+      justLoaded.current = false;
+      return;
+    }
     const save = async () => {
       clearTimeout(id);
       if (flushNow === save) flushNow = null;
-      await api('/api/project', { method: 'PUT', json: { project } });
+      await api('/api/project', { method: 'PUT', json: { id: projectId, project } });
     };
     const id = setTimeout(() => void save(), 600);
     flushNow = save;
     return () => clearTimeout(id);
-  }, [project]);
+  }, [project, projectId]);
   return [project, setProject] as const;
 }
