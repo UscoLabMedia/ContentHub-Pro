@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
-  SAMPLE_TEXT, Vault, claudeCodeStatus, toSlideSpecs, sineWav, createProject, currentId, deleteProject, duplicateProject, exportEnvelope, importProject, listProjects, getProjectData, type KV, createClaudeCodeClient, fetchRadar, piperAssetUrl, pdfToText,
+  SAMPLE_TEXT, Vault, claudeCodeStatus, toSlideSpecs, heroStartSec, beatTimes, segmentCount, sineWav, createProject, currentId, deleteProject, duplicateProject, exportEnvelope, importProject, listProjects, getProjectData, type KV, createClaudeCodeClient, fetchRadar, piperAssetUrl, pdfToText,
   run, runFfmpeg, toWav16k, transcribe, wavInfo, type BlobStorage, type Tts,
 } from '@chp/core';
 import { renderCarousel, renderFile, renderStatus, renderStill, startRender } from './render.ts';
@@ -224,6 +224,15 @@ export const CHECKS: Check[] = [
       await dropOriginal(c.dataDir, id);
       await rm(input, { force: true });
     }
+  } },
+  { id: 'rhythm', label: 'Ritmo del video (número y beats con la palabra, cambios visuales)', group: 'Video', run: async () => {
+    const sc = { text: 'El satélite viaja a 20.200 km de altura', durationSec: 12, speechSec: 10 };
+    const hero = heroStartSec(sc);
+    const beats = beatTimes(sc, ['satélite']);
+    if (hero === null || !(hero > 1 && hero < 4)) throw new Error(`El número debía aparecer cuando se dice (hacia 2 s) y sale en ${hero}`);
+    if (beats.length !== 1) throw new Error('No encontré la palabra del beat');
+    if (segmentCount(12) !== 2 || segmentCount(4) !== 1) throw new Error('El reparto en segmentos visuales no es el esperado');
+    return `Número a los ${hero.toFixed(1)} s, beat a los ${beats[0]!.toFixed(1)} s, 12 s = 2 segmentos`;
   } },
   { id: 'projects', label: 'Gestor de proyectos (crear, duplicar, exportar, eliminar)', group: 'Sistema', run: async () => {
     const m = new Map<string, unknown>();

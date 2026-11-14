@@ -11,7 +11,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
   Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
-  OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, segmentsIn, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
+  OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, segmentsIn, matchBeatWords, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
 import { isRenderId, renderCarouselSlide, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
@@ -144,6 +144,15 @@ const originalCutter = (s: { vault: Vault; sources: Map<string, SourceRecord> })
   const bad = validateOriginal(o, rec.durationSec);
   if (bad) throw new Error(bad);
   return cutClip({ dataDir: DATA_DIR, unseal: (b) => s.vault.openBytes(b), cacheFile: (h) => tts.cacheFile(h), original: o, segments: rec.segments, text });
+};
+/** The key words chosen for each scene (saved in the project by scene wording); only words that really are in the text are used. */
+const withBeats = <T extends { text: string }>(scenes: T[], s: { vault: Vault }): (T & { beatWords?: string[] })[] => {
+  const all = (currentData(s.vault) as { beats?: Record<string, string[]> } | undefined)?.beats ?? {};
+  return scenes.map((sc) => {
+    const w = all[textKey(sc.text)];
+    const words = Array.isArray(w) ? matchBeatWords(sc.text, w.map(String)) : [];
+    return words.length ? { ...sc, beatWords: words } : sc;
+  });
 };
 /** Keeps each scene's `original` (which part of which file) through the steps that rebuild scenes from text only. */
 const withOriginal = <T extends { text: string; durationSec: number }>(scenes: T[], input: { original?: SceneOriginal }[]): (T & { original?: SceneOriginal })[] =>
@@ -838,6 +847,21 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { art: await saveDrawn(DATA_DIR, svg, desc) });
     }
 
+    // --- beats: key words with a zoom hit and a click (one small AI query for the whole script) ---
+    if (url.pathname === '/api/beats/propose' && req.method === 'POST') {
+      const b = await readBody(req);
+      const texts: string[] = Array.isArray(b.scenes) ? b.scenes.slice(0, 60).map((x: { text?: unknown }) => String(x?.text ?? '').slice(0, 400)).filter((t: string) => t.trim()) : [];
+      if (!texts.length) return json(res, 400, { error: 'No hay escenas' });
+      if (!s.gateway) return json(res, 409, { error: 'Elige un motor de IA en Ajustes' });
+      try {
+        const r = await s.gateway.run('beatWords', texts.map((t) => `${textKey(t)}|${t}`).join('\n'));
+        const got = new Map(r.data.scenes.map((x) => [x.key, x.words]));
+        return json(res, 200, { items: texts.map((t) => ({ key: textKey(t), words: matchBeatWords(t, got.get(textKey(t)) ?? []) })) });
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudieron proponer las palabras' });
+      }
+    }
+
     // --- fragments of the person's own audio: listen to a cut before using it ---
     if (url.pathname === '/api/fragments/preview' && req.method === 'POST') {
       const b = await readBody(req);
@@ -874,7 +898,7 @@ const server = createServer(async (req, res) => {
       }
       const request: PackageRequest = {
         card, slides,
-        items: b.items, scenes: withOriginal(withBroll(withArt(baseScenes, s), s), base.data.scenes), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s), music: musicFor(s),
+        items: b.items, scenes: withBeats(withOriginal(withBroll(withArt(baseScenes, s), s), base.data.scenes), s), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s), music: musicFor(s),
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,
         summary: String(b.summary ?? '').slice(0, 3000),
@@ -915,7 +939,7 @@ const server = createServer(async (req, res) => {
       const g = gate(baseScenes, projectChecks(s));
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
       const credits = creditsWithArt(baseScenes, s);
-      const artScenes = withOriginal(withBroll(withArt(baseScenes, s), s), spec.data.scenes);
+      const artScenes = withBeats(withOriginal(withBroll(withArt(baseScenes, s), s), spec.data.scenes), s);
       const clean = { ...spec.data, fonts: userFontsFor(spec.data.style, s), music: musicFor(s), scenes: credits.sources.length || credits.images.length || credits.music.length || credits.video.length ? [...artScenes, { text: creditCardText(credits), durationSec: 6, card: true }] : artScenes };
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {

@@ -12,6 +12,7 @@ import { Broll } from './Broll.tsx';
 import { Subtitles } from './Subtitles.tsx';
 import { Music } from './Music.tsx';
 import { Sfx } from './Sfx.tsx';
+import { Beats } from './Beats.tsx';
 import { Verification } from './Verification.tsx';
 import { Head, PLATFORMS, Status, card, field, primary, type P } from './ui.tsx';
 
@@ -143,6 +144,7 @@ export function StepProduction({ project, set }: P) {
       <Broll project={project} set={set} />
       <Music project={project} set={set} />
       <Sfx project={project} set={set} />
+      <Beats project={project} set={set} />
       <Verification project={project} set={set} />
     </div>
   );

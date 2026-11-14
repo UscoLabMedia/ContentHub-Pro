@@ -104,9 +104,10 @@ export const Particles = ({ style, frame, index, width, height }: { style: Style
 };
 
 /** A figure that counts up and flies in from the camera. */
-export const Hero = ({ hero, style, frame, fps, width, height }: { hero: HeroNumber; style: StyleProfile; frame: number; fps: number; width: number; height: number }) => {
-  const enter = spring({ frame: frame - 4, fps, config: { damping: 14, stiffness: 120 } });
-  const count = interpolate(frame, [6, 6 + fps * 1.3], [0, hero.value], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
+export const Hero = ({ hero, style, frame, fps, width, height, startFrame = 4 }: { hero: HeroNumber; style: StyleProfile; frame: number; fps: number; width: number; height: number; /** The frame at which the number appears: the moment the voice says it. */ startFrame?: number }) => {
+  if (frame < startFrame) return null;
+  const enter = spring({ frame: frame - startFrame, fps, config: { damping: 14, stiffness: 120 } });
+  const count = interpolate(frame, [startFrame + 2, startFrame + 2 + fps * 1.3], [0, hero.value], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
   const portrait = height > width;
   const size = width * (portrait ? 0.2 : 0.13);
   return (

@@ -73,6 +73,9 @@ export function Sfx({ project, set }: P) {
           <label className="text-slate-300">Número gigante
             <select value={cfg.hero} onChange={(e) => apply({ hero: e.target.value })} className={`${field} mt-1 block w-full`} aria-label="Sonido del número gigante">{options(effects)}</select>
           </label>
+          <label className="text-slate-300">Palabra clave (beat)
+            <select value={cfg.beat} onChange={(e) => apply({ beat: e.target.value })} className={`${field} mt-1 block w-full`} aria-label="Sonido del beat">{options(effects)}</select>
+          </label>
           <label className="text-slate-300">Ilustración
             <select value={cfg.art} onChange={(e) => apply({ art: e.target.value })} className={`${field} mt-1 block w-full`} aria-label="Sonido de la ilustración">{options(effects)}</select>
           </label>

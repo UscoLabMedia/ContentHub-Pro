@@ -3,7 +3,8 @@
 import { SFX_RECIPES, AMBIENT_RECIPES, SR, synthSfx } from './sfx-synth.ts';
 import { captionsOf } from './subtitles.ts';
 import { animFor, SUB_ANIMS, type SubAnim } from './subtitles.ts';
-import { captionGroups, heroNumber, readingSeconds, withSpokenTimes, wordTimings, type StyleProfile } from './style.ts';
+import { captionGroups, heroNumber, type StyleProfile } from './style.ts';
+import { heroStartSec, sceneWordTimes } from './rhythm.ts';
 import { musicGain, speechWindows, type MusicMix } from './music.ts';
 
 export type SfxCategory = 'transition' | 'accent' | 'click' | 'ambient';
@@ -39,6 +40,8 @@ export interface SfxConfig {
   volume: number;
   sceneChange: { sound: SfxChoice; /** Sounds that take turns after the first one (empty = always `sound`). */ rotate: string[]; skipFirst: boolean };
   hero: SfxChoice;
+  /** The "beat" on a key word (zoom hit): a short click when it is said. */
+  beat: SfxChoice;
   art: SfxChoice;
   captions: { mode: 'off' | 'group' | 'word'; byAnimation: Record<SubAnim, SfxChoice> };
   ambient: { sound: SfxChoice; volume: number };
@@ -49,6 +52,7 @@ export const DEFAULT_SFX: SfxConfig = {
   volume: 0.6,
   sceneChange: { sound: 'whoosh', rotate: [], skipFirst: true },
   hero: 'pop',
+  beat: 'tick',
   art: 'swipe',
   captions: { mode: 'off', byAnimation: { pop: 'pop', slideUp: 'swipe', bounce: 'pop', fade: 'tick', typewriter: 'typewriter', zoom: 'whoosh-soft', shake: 'thud', wipe: 'swipe' } },
   ambient: { sound: 'none', volume: 0.15 },
@@ -72,6 +76,7 @@ export function normalizeSfx(x: Partial<SfxConfig> | undefined | null): SfxConfi
       skipFirst: typeof x?.sceneChange?.skipFirst === 'boolean' ? x.sceneChange.skipFirst : d.sceneChange.skipFirst,
     },
     hero: pick(x?.hero, d.hero),
+    beat: pick(x?.beat, d.beat),
     art: pick(x?.art, d.art),
     captions: { mode: mode === 'group' || mode === 'word' || mode === 'off' ? mode : 'off', byAnimation },
     ambient: { sound: pick(x?.ambient?.sound, 'none', true), volume: clamp(x?.ambient?.volume ?? d.ambient.volume, 0, 0.6) },
@@ -79,7 +84,7 @@ export function normalizeSfx(x: Partial<SfxConfig> | undefined | null): SfxConfi
 }
 
 // ---------------------------------------------------------------------------- events
-export interface SfxScene { text: string; durationSec: number; speechSec?: number; wordTimes?: { from: number; to: number }[]; card?: boolean; art?: unknown }
+export interface SfxScene { text: string; durationSec: number; speechSec?: number; wordTimes?: { from: number; to: number }[]; card?: boolean; art?: unknown; /** Seconds (from the start of the scene) of the key words. */ beats?: number[] }
 export interface SfxEvent { t: number; sound: string; gain: number }
 
 /** When each sound plays, from the final timeline (scene lengths already stretched to the narration). */
@@ -97,13 +102,14 @@ export function sfxEvents(scenes: SfxScene[], style: Pick<StyleProfile, 'caption
         out.push({ t: start, sound: pool[turn % pool.length]!, gain: 1 });
         turn++;
       }
-      if (cfg.hero !== 'none' && heroNumber(sc.text)) out.push({ t: start + 0.13, sound: cfg.hero, gain: 0.9 });
+      // the giant number appears as it is said, not at a fixed moment of the scene
+      if (cfg.hero !== 'none' && heroNumber(sc.text)) out.push({ t: start + Math.max(0.13, (heroStartSec(sc) ?? 0.17) - 0.13), sound: cfg.hero, gain: 0.9 });
+      if (cfg.beat !== 'none') for (const b of sc.beats ?? []) out.push({ t: start + b, sound: cfg.beat, gain: 0.8 });
       if (cfg.art !== 'none' && sc.art) out.push({ t: start + 0.2, sound: cfg.art, gain: 0.7 });
       if (cfg.captions.mode !== 'off') {
         const sound = cfg.captions.byAnimation[animFor(cap, i)] ?? 'none';
         if (sound !== 'none') {
-          const span = Math.max(0.6, Math.min(sc.speechSec ?? readingSeconds(sc.text), sc.durationSec - 0.35));
-          const words = withSpokenTimes(wordTimings(sc.text, 0.15, span), sc.wordTimes);
+          const words = sceneWordTimes(sc);
           if (cfg.captions.mode === 'word') for (const w of words) out.push({ t: start + w.from, sound, gain: 0.45 });
           else for (const g of captionGroups(words, cap.wordsPerGroup)) out.push({ t: start + g[0]!.from, sound, gain: 0.6 });
         }

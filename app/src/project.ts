@@ -32,6 +32,8 @@ export interface Project {
   art: Record<string, ArtRef>;
   /** Stock video (B-roll) as a scene's background, per scene wording. */
   broll: Record<string, BrollRef>;
+  /** Key words per scene (by scene wording): each gets a zoom hit and a click when it is said. */
+  beats: Record<string, string[]>;
   /** Background music: the chosen track (mp3 kept by the server) and how it is mixed. */
   music: { track: MusicRef | null; mood: string; hint: string; mix: MusicMix };
   /** Sound effects: which sound plays on which event (see core/sfx). Off by default. */
@@ -70,6 +72,7 @@ export const EMPTY_PROJECT: Project = {
   verification: {},
   art: {},
   broll: {},
+  beats: {},
   music: { track: null, mood: 'documental', hint: '', mix: DEFAULT_MIX },
   sfx: DEFAULT_SFX,
   production: { preset: '', themeIdx: 0, scenes: [], style: DEFAULT_STYLE },
@@ -82,7 +85,7 @@ export const defaultPreset = (p: Project): string => PLATFORM_PRESET[(p.platform
 export const presetOf = (p: Project): string => p.production.preset || defaultPreset(p);
 /** Narration settings sent with a render (null = silent video). */
 export const voiceOf = (p: Project) => (p.voice.mode === 'narrate' && p.voice.voiceId ? { id: p.voice.voiceId, speed: p.voice.speed, pitch: p.voice.pitch ?? 0, style: p.voice.style ?? '' } : null);
-export const specKey = (p: Project): string => JSON.stringify({ spec: toSpec(presetOf(p), p.production.scenes, p.production.themeIdx, p.production.style), voice: voiceOf(p), art: p.production.scenes.map((s) => p.art[textKey(s.text)]?.id ?? ''), music: p.music.track ? { id: p.music.track.id, mix: p.music.mix } : null, sfx: normalizeSfx(p.sfx), broll: p.production.scenes.map((s) => p.broll[textKey(s.text)]?.id ?? '') });
+export const specKey = (p: Project): string => JSON.stringify({ spec: toSpec(presetOf(p), p.production.scenes, p.production.themeIdx, p.production.style), voice: voiceOf(p), art: p.production.scenes.map((s) => p.art[textKey(s.text)]?.id ?? ''), music: p.music.track ? { id: p.music.track.id, mix: p.music.mix } : null, sfx: normalizeSfx(p.sfx), broll: p.production.scenes.map((s) => p.broll[textKey(s.text)]?.id ?? ''), beats: p.production.scenes.map((s) => (p.beats[textKey(s.text)] ?? []).join('|')) });
 
 let flushNow: (() => Promise<void>) | null = null;
 /** Saves any pending project change right now. Call before actions the server checks against the saved project. */
@@ -91,7 +94,7 @@ export const flushProject = async (): Promise<void> => {
 };
 
 /** A saved project (possibly from an older version, or empty) completed with the current defaults. */
-export const hydrate = (saved: Partial<Project>): Project => ({ ...EMPTY_PROJECT, ...saved, fragments: Array.isArray(saved.fragments) ? saved.fragments : [], voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, broll: { ...saved.broll }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
+export const hydrate = (saved: Partial<Project>): Project => ({ ...EMPTY_PROJECT, ...saved, fragments: Array.isArray(saved.fragments) ? saved.fragments : [], voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, broll: { ...saved.broll }, beats: { ...saved.beats }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
 
 /** State of one project saved (encrypted) in the vault, debounced. Changing `projectId` loads another project. */
 export function useProject(projectId: string) {
