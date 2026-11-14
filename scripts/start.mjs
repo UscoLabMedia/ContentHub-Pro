@@ -13,6 +13,14 @@ const npm = win ? 'npm.cmd' : 'npm';
 const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { cwd: root, stdio: 'inherit', shell: win && cmd === npm, ...opts });
 const say = (m) => console.log(`\n▶ ${m}`);
 
+// A damaged Windows PATH (e.g. a stray quote swallows every entry after it) hides node, git and npm's global programs
+// such as `claude`. The usual folders go first, so everything started from here (the server, `claude`, npm) finds them.
+if (win) {
+  const pf = process.env.ProgramFiles ?? 'C:\\Program Files';
+  const usual = [join(pf, 'nodejs'), join(pf, 'Git', 'cmd'), join(process.env.APPDATA ?? '', 'npm'), join(process.env.USERPROFILE ?? '', '.local', 'bin')].filter((d) => existsSync(d));
+  process.env.PATH = [...usual, process.env.PATH ?? ''].join(';');
+}
+
 const major = Number(process.versions.node.split('.')[0]);
 if (major < 20) {
   console.error(`Node ${process.versions.node} is too old. Install Node 22 LTS from https://nodejs.org and run again.`);
