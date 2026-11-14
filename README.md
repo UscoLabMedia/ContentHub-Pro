@@ -174,3 +174,11 @@ En el paso 6, filtro **Locales**: **Dora**, **Alex** y **Santa** (Kokoro, 82 mil
 La primera vez que pides una muestra se instalan solas (unos 220 MB, una sola vez) en tu carpeta de datos: un Python privado (si no tienes Python 3.10–3.13, se descarga uno con `uv`, sin permisos de administrador), el paquete `kokoro-onnx`, el modelo y las voces (con comprobación de integridad SHA-256). Un proceso pequeño mantiene el modelo cargado y se apaga solo tras 5 minutos sin uso. Nada de tu texto sale de tu PC.
 
 Licencias: el motor `espeak-ng` que usa Kokoro para pronunciar es GPL-3.0; se instala en tu PC como dependencia y no se redistribuye con este proyecto. Revisa la ficha oficial del modelo antes de uso comercial.
+
+## Clonar una voz
+
+En el paso 6, **Clonar una voz**: subes (o grabas con el micrófono) una muestra de **6 a 30 segundos** y la app le pone ese timbre a cualquier voz base (Kokoro, Azure, Edge o Piper). Funciona de voz a voz: la voz base dice el texto y luego un convertidor (**OpenVoice v2**, MIT, en formato ONNX mediante `voiceclonnx`) le cambia el timbre. Por eso la **velocidad, el tono, el estilo y las pausas** se ajustan en la voz base como siempre, y los tiempos por palabra del karaoke se conservan. Motores alternativos: FACodec y kNN-VC.
+
+**Consentimiento obligatorio:** debes indicar si es tu propia voz o la de otra persona que te dio permiso por escrito (con su nombre), para qué la usarás, y marcar la casilla de confirmación. Sin eso no se lee ni se guarda nada. La muestra queda **cifrada** en tu bóveda (solo se descifra un instante, en un archivo temporal, mientras se convierte un clip) y al borrar la voz se eliminan la muestra y las narraciones hechas con ella. Los videos narrados con una voz clonada llevan en la descripción una línea que indica que la voz es sintética. No clones voces de personas públicas ni la uses para engañar o suplantar a nadie.
+
+La primera vez se instala un Python privado y `voiceclonnx` y se descargan los modelos (unos 160 MB, desde Hugging Face). Corre solo en CPU (no usa la tarjeta de video).

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, getToken } from '../api.ts';
 import { scriptToScenes } from '@chp/core/production';
+import { VoiceClone } from './VoiceClone.tsx';
 import { Head, field, primary, type P } from './ui.tsx';
 
 interface VoiceInfo {
   id: string;
   label: string;
-  engine: 'piper' | 'sapi' | 'edge' | 'azure';
+  engine: 'piper' | 'sapi' | 'edge' | 'azure' | 'kokoro' | 'clone';
   lang: string;
   quality: 'low' | 'medium' | 'high' | 'system' | 'neural';
   sizeMB?: number;
@@ -30,7 +31,7 @@ interface Job {
 
 const QUALITY: Record<VoiceInfo['quality'], string> = { low: 'básica', medium: 'natural', high: 'alta calidad', system: 'del sistema', neural: 'neuronal' };
 const STYLE_LABEL: Record<string, string> = { cheerful: 'Alegre', sad: 'Triste', excited: 'Entusiasta', friendly: 'Amigable', hopeful: 'Esperanzado', angry: 'Enojado', terrified: 'Asustado', shouting: 'Gritando', whispering: 'Susurro', unfriendly: 'Seco', chat: 'Conversación', calm: 'Calmado', serious: 'Serio', gentle: 'Suave', affectionate: 'Cariñoso', embarrassed: 'Tímido', fearful: 'Temeroso', disgruntled: 'Molesto', depressed: 'Desanimado', envious: 'Envidioso', empathetic: 'Empático', lyrical: 'Lírico', narration: 'Narración', 'newscast-casual': 'Noticiero casual', 'newscast-formal': 'Noticiero formal', 'customerservice': 'Atención al cliente', 'advertisement-upbeat': 'Publicidad animada', documentary: 'Documental', 'poetry-reading': 'Poesía', 'sports-commentary': 'Deportes' };
-const FILTERS = [{ id: 'all', label: 'Todas' }, { id: 'online', label: 'En línea' }, { id: 'local', label: 'Locales' }] as const;
+const FILTERS = [{ id: 'all', label: 'Todas' }, { id: 'online', label: 'En línea' }, { id: 'local', label: 'Locales' }, { id: 'clones', label: 'Clonadas' }] as const;
 const DEFAULT_SAMPLE = 'Hola, bienvenidos a ContentHub Pro. Esta es una muestra de mi voz para tu próximo video.';
 
 export function StepVoice({ project, set }: P) {
@@ -91,7 +92,7 @@ export function StepVoice({ project, set }: P) {
   const busy = job?.job.status === 'working';
   const chosen = voices?.find((x) => x.id === v.voiceId);
   const isOnline = (x: VoiceInfo) => x.engine === 'edge' || x.engine === 'azure';
-  const shown = voices?.filter((x) => filter === 'all' || (filter === 'online' ? isOnline(x) : !isOnline(x)));
+  const shown = voices?.filter((x) => filter === 'all' || (filter === 'online' ? isOnline(x) : filter === 'clones' ? x.engine === 'clone' : !isOnline(x) && x.engine !== 'clone'));
   const setVoice = (patch: Partial<typeof v>) => set({ ...project, voice: { ...v, ...patch } });
 
   return (
@@ -160,6 +161,7 @@ export function StepVoice({ project, set }: P) {
               );
             })}
           </div>
+          <VoiceClone bases={voices ?? []} onChanged={() => void load()} onCreated={() => setFilter('clones')} />
           <details className="rounded-lg bg-slate-950 p-3 text-xs">
             <summary className="cursor-pointer font-semibold text-slate-300">Voces en línea: Edge y Azure {online?.azure.configured ? `(Azure ✓ ${online.azure.region})` : ''}</summary>
             <div className="mt-2 space-y-2 text-[11px] text-slate-400">
@@ -177,7 +179,7 @@ export function StepVoice({ project, set }: P) {
             </div>
           </details>
           <p className="text-[11px] text-slate-500">
-            Voces gratuitas y locales: <a className="underline" href="https://github.com/rhasspy/piper" target="_blank" rel="noreferrer">Piper (MIT, GitHub)</a> con modelos de <a className="underline" href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noreferrer">rhasspy/piper-voices</a> y las voces incluidas en Windows. Cada voz tiene su propia licencia: revísala antes de uso comercial. Son voces sintéticas; la clonación llega en una etapa posterior.
+            Voces gratuitas y locales: <a className="underline" href="https://github.com/rhasspy/piper" target="_blank" rel="noreferrer">Piper (MIT, GitHub)</a> con modelos de <a className="underline" href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noreferrer">rhasspy/piper-voices</a> y las voces incluidas en Windows. Cada voz tiene su propia licencia: revísala antes de uso comercial. Son voces sintéticas. Para clonar una voz (con consentimiento) abre «Clonar una voz».
           </p>
         </>
       )}

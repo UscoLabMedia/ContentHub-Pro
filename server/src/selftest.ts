@@ -13,6 +13,7 @@ import { renderFile, renderStatus, renderStill, startRender } from './render.ts'
 import { checkSource } from './verify.ts';
 import { edgeProvider } from './voice-online.ts';
 import { KokoroEngine } from './kokoro.ts';
+import { cloneDir } from './voiceclone.ts';
 import { searchBroll, FONTS, SFX_LIBRARY, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
 import { existsSync } from 'node:fs';
 
@@ -188,6 +189,12 @@ export const CHECKS: Check[] = [
       k.stop();
       await rm(file, { force: true });
     }
+  } },
+  { id: 'voiceclone', label: 'Clonación de voz (OpenVoice, en tu PC)', group: 'Voz', run: async (c) => {
+    if (!existsSync(join(cloneDir(c.dataDir), 'ready.json'))) throw new Warn('Aún no está instalada: se instala sola la primera vez que uses una voz clonada (modelos de unos 160 MB). Necesita internet esa vez');
+    const ready = ['openvoice', 'facodec', 'knnvc'].filter((e) => existsSync(join(cloneDir(c.dataDir), `models-${e}.ok`)));
+    if (!ready.length) throw new Warn('El motor está instalado pero los modelos aún no se descargaron: se bajan al escuchar tu primera voz clonada');
+    return `Listo (modelos: ${ready.join(', ')})`;
   } },
   { id: 'thumbnail', label: 'Miniatura (imagen 1280×720)', group: 'Video', run: async (c) => {
     if (!c.full) throw new Skip('Solo en la prueba completa');
