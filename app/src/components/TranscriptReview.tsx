@@ -40,6 +40,9 @@ export function TranscriptReview({ source, onClose, onDone }: { source: SourceVi
   const [saving, setSaving] = useState(false);
   const audio = useRef<HTMLAudioElement>(null);
   const stopAt = useRef(0);
+  const [time, setTime] = useState(0);
+  const [dur, setDur] = useState(0);
+  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     api<LinesResponse>(`/api/sources/${source.id}/lines`).then(setData).catch((e: Error) => setErr(e.message));
@@ -57,10 +60,27 @@ export function TranscriptReview({ source, onClose, onDone }: { source: SourceVi
   };
   const onTime = () => {
     const a = audio.current;
+    if (a) setTime(a.currentTime);
     if (a && stopAt.current && a.currentTime >= stopAt.current) {
       a.pause();
       stopAt.current = 0;
     }
+  };
+
+  /** Free listening: moving the slider or pressing pause cancels the "stop at the end of this passage" rule. */
+  const seek = (t: number) => {
+    const a = audio.current;
+    if (!a) return;
+    stopAt.current = 0;
+    a.currentTime = Math.min(Math.max(0, t), dur || t);
+    setTime(a.currentTime);
+  };
+  const playPause = () => {
+    const a = audio.current;
+    if (!a) return;
+    stopAt.current = 0;
+    if (a.paused) void a.play().catch(() => {});
+    else a.pause();
   };
 
   const toggle = (id: number) => setSelected((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -110,7 +130,16 @@ export function TranscriptReview({ source, onClose, onDone }: { source: SourceVi
           <h2 className="truncate font-bold">{stage === 'select' ? 'Elegir tramos' : 'Confirmar la transcripción'} · {source.name}</h2>
           <button onClick={onClose} className="text-sm text-slate-400 hover:text-white">Cerrar</button>
         </div>
-        {data?.hasAudio && <audio ref={audio} src={`/api/sources/${source.id}/audio?s=${getToken()}`} preload="auto" onTimeUpdate={onTime} className="hidden" />}
+        {data?.hasAudio && <audio ref={audio} src={`/api/sources/${source.id}/audio?s=${getToken()}`} preload="auto" onTimeUpdate={onTime} onLoadedMetadata={(e) => setDur(e.currentTarget.duration || 0)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} className="hidden" />}
+        {data?.hasAudio && (
+          <div className="sticky top-0 z-10 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950 p-2 text-xs" role="group" aria-label="Línea de tiempo del audio">
+            <button className={btn} onClick={playPause} aria-label={playing ? 'Pausar' : 'Reproducir'}>{playing ? '⏸' : '▶'}</button>
+            <button className={btn} onClick={() => seek(time - 5)} aria-label="Retroceder 5 segundos">−5 s</button>
+            <input type="range" min={0} max={dur || 0} step={0.1} value={Math.min(time, dur || 0)} onChange={(e) => seek(Number(e.target.value))} aria-label="Posición del audio" className="min-w-0 flex-1" />
+            <button className={btn} onClick={() => seek(time + 5)} aria-label="Adelantar 5 segundos">+5 s</button>
+            <span className="w-24 shrink-0 text-right tabular-nums text-slate-400">{mmss(time)} / {mmss(dur)}</span>
+          </div>
+        )}
         {data && !data.hasAudio && <p className="rounded-lg bg-amber-950/40 p-2 text-xs text-amber-300">No hay audio guardado de este archivo (ya se borró o no se pudo guardar), así que puedes elegir tramos pero no escucharlos. Vuelve a subir el archivo si quieres revisarlo con audio.</p>}
         {err && <p className="text-sm text-rose-400" role="alert">{err}</p>}
         {!data && !err && <p className="text-sm text-slate-400" role="status">Cargando transcripción…</p>}
@@ -136,7 +165,7 @@ export function TranscriptReview({ source, onClose, onDone }: { source: SourceVi
             </div>
             <ul className="max-h-[50vh] space-y-1 overflow-y-auto">
               {lines.map((l) => (
-                <li key={l.id} className={`flex items-start gap-2 rounded-lg border p-2 text-xs ${selected.has(l.id) ? 'border-indigo-500 bg-indigo-950/30' : 'border-slate-800'}`}>
+                <li key={l.id} className={`flex items-start gap-2 rounded-lg border p-2 text-xs ${selected.has(l.id) ? 'border-indigo-500 bg-indigo-950/30' : 'border-slate-800'} ${playing && time >= l.start && time < l.end ? 'ring-1 ring-emerald-500' : ''}`}>
                   <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Elegir tramo ${mmss(l.start)}`} className="mt-1" />
                   <span className="w-12 shrink-0 text-slate-500">{mmss(l.start)}</span>
                   {data.hasAudio && <button className="shrink-0 text-indigo-300" aria-label={`Escuchar ${mmss(l.start)}`} onClick={() => play(l.start, l.end)}>▶</button>}
