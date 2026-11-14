@@ -37,10 +37,23 @@ Paso 1 → pestaña **«Desde mis archivos»**: sube un podcast, audio, video, t
 ## Flujo completo (11 pasos)
 
 1. **Punto de partida:** tendencias con datos reales o tus propios archivos. 2. **Tratamiento.** 3. **Audiencia.** 4. **Formatos y plataformas.** 5. **Guion.**
-6. **Voz:** escucha muestras de voces gratuitas, elige una (o video sin voz). 7. **Producción:** el guion se convierte en escenas animadas editables, en tu PC y sin IA. 8. **Borrador** (mitad de tamaño, con la voz) que debes aprobar. 9. **Render final** (máx. 1080p) en MP4.
+6. **Voz:** escucha muestras de voces gratuitas, elige una (o video sin voz). 7. **Producción:** el guion se convierte en escenas animadas editables, en tu PC y sin IA. 8. **Borrador** (mitad de tamaño, con la voz) que debes aprobar. 9. **Entregables:** marcas lo que quieres producir y se genera todo en tu PC a calidad final (máx. 1080p).
 10. **Publicación:** textos listos por plataforma; tú publicas y registras el enlace. 11. **Análisis:** sube CSV, PDF o captura de tus métricas; se leen en local y la IA interpreta un resumen corto.
 
 Si cambias escenas, estilo o voz, el video queda marcado como desactualizado y hay que generarlo de nuevo. Pendiente: carruseles de imágenes, música de fondo y publicación automática (cada plataforma exige tu propia sesión y credenciales de desarrollador).
+
+## Entregables que se marcan (paso 9)
+
+| Entregable | Qué sale |
+|---|---|
+| Video largo 16:9 | MP4 1920×1080 con la voz |
+| Shorts verticales | Un MP4 1080×1920 por cada Short; tú eliges qué escenas lleva cada uno (se proponen solos, máx. 60 s) |
+| Miniatura | PNG 1280×720 con tu título |
+| Descripción | Texto con resumen, capítulos con tiempos (si el video los permite), fuentes de los datos y hashtags |
+| Voz sola | WAV de la narración alineado con el video, para mejorarlo en otra app (debe volver con la misma duración) |
+| Subtítulos | Archivo `.srt` sincronizado con el video largo |
+
+Cada archivo tiene su enlace de descarga con un nombre claro. Si cambias escenas, estilo o voz, los archivos quedan marcados como desactualizados.
 
 ## Revisión de la transcripción (audio y video)
 

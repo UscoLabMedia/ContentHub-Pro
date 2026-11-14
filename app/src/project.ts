@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { PLATFORM_PRESET, toSpec, type Scene } from '@chp/core/production';
+import type { DeliverableId, ShortRange } from '@chp/core/deliverables';
 import type { PlatformId, PublishCopy } from '@chp/core/schemas';
 import { api } from './api.ts';
 
@@ -17,6 +18,14 @@ export interface Project {
   production: { preset: string; themeIdx: number; scenes: Scene[] };
   renders: { draft: RenderRef | null; draftApproved: boolean; final: RenderRef | null };
   publish: { copy: PublishCopy[] | null; posted: { platform: string; url: string; date: string }[] };
+  /** What to produce at the end. `shorts: null` = split automatically. `result` is valid only for the spec it was made from. */
+  deliverables: {
+    selected: DeliverableId[];
+    shorts: ShortRange[] | null;
+    thumbTitle: string;
+    summary: string;
+    result: { key: string; items: { id: DeliverableId; label: string; status: string; error?: string; files: { name: string; url: string; kind: string }[] }[] } | null;
+  };
 }
 
 /** A finished render plus the exact spec it was made from (so we know when it is out of date). */
@@ -37,6 +46,7 @@ export const EMPTY_PROJECT: Project = {
   production: { preset: '', themeIdx: 0, scenes: [] },
   renders: { draft: null, draftApproved: false, final: null },
   publish: { copy: null, posted: [] },
+  deliverables: { selected: ['long', 'shorts', 'thumbnail', 'description'], shorts: null, thumbTitle: '', summary: '', result: null },
 };
 
 export const defaultPreset = (p: Project): string => PLATFORM_PRESET[(p.platforms[0] as PlatformId) ?? 'tiktok'] ?? 'tiktok';
@@ -52,7 +62,7 @@ export function useProject() {
   useEffect(() => {
     api<{ project: Project | null }>('/api/project').then((r) => {
       const saved = r.project ?? ({} as Partial<Project>);
-      setProject({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish } });
+      setProject({ ...EMPTY_PROJECT, ...saved, voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
       loaded.current = true;
     });
   }, []);

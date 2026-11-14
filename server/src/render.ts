@@ -38,6 +38,68 @@ export function renderStatus(dataDir: string, id: string): RenderJob | null {
 const friendly = (log: string): string =>
   /browser|chrom/i.test(log) ? 'No pude preparar el navegador de render (necesita internet la primera vez). Revisa tu conexión e inténtalo de nuevo.' : `El render falló: ${log.slice(-300).trim()}`;
 
+export interface NarratedScenes {
+  /** The spec with each scene's narration URL and a duration long enough for its voice. */
+  spec: VideoSpec;
+  /** Narration clip file per scene (same order) and the final length of that scene. */
+  clips: { file: string; durationSec: number }[];
+}
+
+/** One clip per scene (cached by voice + text): each scene lasts at least as long as its narration. */
+export async function narrateScenes(input: VideoSpec, narration: Narration, onProgress?: (fraction: number) => void): Promise<NarratedScenes> {
+  const scenes: VideoSpec['scenes'] = [];
+  const clips: NarratedScenes['clips'] = [];
+  for (const [i, sc] of input.scenes.entries()) {
+    const n = await narration.tts.synth(narration.voiceId, sc.text, narration.speed);
+    const durationSec = Math.max(sc.durationSec, Math.ceil((n.durationSec + 0.5) * 10) / 10);
+    scenes.push({ ...sc, audioUrl: narration.audioUrl(n.hash), durationSec });
+    clips.push({ file: n.file, durationSec });
+    onProgress?.((i + 1) / input.scenes.length);
+  }
+  const spec = { ...input, scenes };
+  const bad = validateSpec(spec);
+  if (bad) throw new Error(bad);
+  return { spec, clips };
+}
+
+/** Waits for a render started with startRender. */
+export async function waitForRender(dataDir: string, id: string, onProgress?: (pct: number) => void): Promise<void> {
+  for (;;) {
+    const j = renderStatus(dataDir, id);
+    if (!j) throw new Error('El render desapareció');
+    onProgress?.(j.progress);
+    if (j.status === 'done') return;
+    if (j.status === 'error') throw new Error(j.error ?? 'El render falló');
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+export interface StillProps {
+  title: string;
+  subtitle?: string;
+  theme: { bg: string; fg: string; accent: string };
+}
+
+/** Renders the 1280×720 thumbnail PNG with the Remotion template. */
+export async function renderStill(props: StillProps, outFile: string, dataDir: string, root: string): Promise<void> {
+  await mkdir(join(dataDir, 'renders'), { recursive: true });
+  const propsPath = join(dataDir, 'renders', `${randomBytes(6).toString('hex')}.json`);
+  await writeFile(propsPath, JSON.stringify(props));
+  const tsx = join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const c = spawn(process.execPath, [tsx, 'render.mjs', propsPath, 'still', outFile], { cwd: join(root, 'video'), windowsHide: true });
+      let log = '';
+      c.stdout.on('data', (d) => (log = (log + d).slice(-1500)));
+      c.stderr.on('data', (d) => (log = (log + d).slice(-1500)));
+      c.on('error', reject);
+      c.on('close', (code) => (code === 0 && existsSync(outFile) ? resolve() : reject(new Error(friendly(log)))));
+    });
+  } finally {
+    await rm(propsPath, { force: true });
+  }
+}
+
 export async function startRender(spec: VideoSpec, quality: 'draft' | 'final', dataDir: string, root: string, narration?: Narration): Promise<RenderJob> {
   const bad = validateSpec(spec);
   if (bad) throw new Error(bad);
@@ -56,16 +118,7 @@ async function run(job: RenderJob, input: VideoSpec, quality: 'draft' | 'final',
   const specPath = join(dataDir, 'renders', `${id}.json`);
   try {
     if (narration) {
-      // One clip per scene (cached by voice + text): each scene lasts at least as long as its narration.
-      const scenes = [];
-      for (const [i, sc] of input.scenes.entries()) {
-        const n = await narration.tts.synth(narration.voiceId, sc.text, narration.speed);
-        scenes.push({ ...sc, audioUrl: narration.audioUrl(n.hash), durationSec: Math.max(sc.durationSec, Math.ceil((n.durationSec + 0.5) * 10) / 10) });
-        job.progress = 1 + Math.round(((i + 1) / input.scenes.length) * 14);
-      }
-      spec = { ...input, scenes };
-      const bad = validateSpec(spec);
-      if (bad) throw new Error(bad);
+      spec = (await narrateScenes(input, narration, (p) => (job.progress = 1 + Math.round(p * 14)))).spec;
     }
     job.label = 'Renderizando';
     await mkdir(join(dataDir, 'renders'), { recursive: true });

@@ -9,7 +9,7 @@ import {
   SAMPLE_TEXT, Vault, claudeCodeStatus, createClaudeCodeClient, fetchRadar, piperAssetUrl, pdfToText,
   run, runFfmpeg, toWav16k, transcribe, wavInfo, type BlobStorage, type Tts,
 } from '@chp/core';
-import { renderFile, renderStatus, startRender } from './render.ts';
+import { renderFile, renderStatus, renderStill, startRender } from './render.ts';
 
 export type Status = 'pending' | 'running' | 'ok' | 'warn' | 'fail' | 'skip';
 export interface CheckResult {
@@ -129,6 +129,14 @@ export const CHECKS: Check[] = [
     throw new Error('El render tardó demasiado (más de 10 minutos)');
   } },
 
+  { id: 'thumbnail', label: 'Miniatura (imagen 1280×720)', group: 'Video', run: async (c) => {
+    if (!c.full) throw new Skip('Solo en la prueba completa');
+    const out = join(c.dataDir, 'selftest-thumb.png');
+    await renderStill({ title: 'Prueba de miniatura', theme: { bg: '#0f172a', fg: '#f8fafc', accent: '#6366f1' } }, out, c.dataDir, c.root);
+    const size = (await stat(out)).size;
+    await rm(out, { force: true });
+    return `PNG generado (${Math.round(size / 1024)} KB)`;
+  } },
   { id: 'sapi', label: 'Voz: voces de Windows (sin descarga)', group: 'Voz', run: async (c) => {
     if (process.platform !== 'win32') throw new Skip('Solo existe en Windows');
     const v = (await c.tts.list()).find((x) => x.engine === 'sapi');

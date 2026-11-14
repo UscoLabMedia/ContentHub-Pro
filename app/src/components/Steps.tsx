@@ -170,7 +170,7 @@ export const canAdvance = (step: number, p: Project): boolean => {
     p.voice.mode === 'silent' || (p.voice.mode === 'narrate' && !!p.voice.voiceId),
     p.production.scenes.length > 0,
     p.renders.draftApproved && p.renders.draft?.spec === key,
-    p.renders.final?.spec === key,
+    p.deliverables.result?.key === key && p.deliverables.result.items.some((i) => i.status === 'done'),
     p.publish.posted.length > 0,
     true,
   ][step - 1] ?? false;
