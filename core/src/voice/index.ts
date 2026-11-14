@@ -23,7 +23,7 @@ export { piperAssetUrl } from './piper.ts';
 export interface VoiceInfo {
   id: string;
   label: string;
-  engine: 'piper' | 'sapi' | 'edge' | 'azure';
+  engine: 'piper' | 'sapi' | 'edge' | 'azure' | 'kokoro';
   lang: string;
   quality: 'low' | 'medium' | 'high' | 'system' | 'neural';
   /** Online voices: Azure speaking styles the voice supports. */
@@ -41,6 +41,12 @@ export interface Narration {
   words?: SpokenWord[];
 }
 
+/** A local engine installed on demand (Kokoro): lists its voices and writes a WAV file for a piece of text. */
+export interface LocalEngine {
+  voices(): VoiceInfo[];
+  synth(voiceKey: string, text: string, speed: number, file: string, report: Report): Promise<void>;
+}
+
 /** An online service that speaks the pieces of a line. The server implements it (network, keys). */
 export interface OnlineProvider {
   engine: 'edge' | 'azure';
@@ -53,7 +59,7 @@ const ONLINE_LABEL = { edge: 'Edge · en línea, gratis', azure: 'Azure · en l�
 
 export class Tts {
   /** `piperBin` lets you use your own Piper build (also how tests inject a fake engine). `online` are the online services. */
-  constructor(private dataDir: string, private piperBin?: string, private online: () => OnlineProvider[] = () => []) {}
+  constructor(private dataDir: string, private piperBin?: string, private online: () => OnlineProvider[] = () => [], private local?: LocalEngine) {}
 
   cacheFile(hash: string): string {
     return join(this.dataDir, 'tts-cache', `${hash}.wav`);
@@ -71,6 +77,7 @@ export class Tts {
     }))))).flat();
     return [
       ...online,
+      ...(this.local?.voices() ?? []),
       ...sapi.map<VoiceInfo>((v) => ({ id: `sapi:${v.name}`, label: `${v.name} · Windows (sin descarga)`, engine: 'sapi', lang: v.culture, quality: 'system', installed: true })),
       ...piper,
     ];
@@ -141,6 +148,12 @@ export class Tts {
     if (voiceId.startsWith('sapi:')) {
       report(20, 'Generando voz');
       await synthSapi(voiceId.slice(5), text, file, speed);
+      return;
+    }
+    const k = voiceId.match(/^kokoro:(.+)$/);
+    if (k) {
+      if (!this.local) throw new Error('Las voces de Kokoro no están disponibles en este equipo');
+      await this.local.synth(k[1]!, text, speed, file, report);
       return;
     }
     const voice: PiperVoice | undefined = PIPER_VOICES.find((v) => v.id === voiceId);
