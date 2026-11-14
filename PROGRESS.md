@@ -35,11 +35,8 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#22 fusionados). Cada 
 
 ## Decisiones tomadas (no volver a preguntar)
 
-<<<<<<< HEAD
 - Gestor de proyectos (elegido por el usuario): pantalla de inicio con tarjetas + selector en la cabecera; nuevo proyecto en blanco pidiendo solo un nombre (o desde plantilla); eliminar borra todo lo suyo con confirmación escribiendo el nombre; extras: duplicar, plantilla desde un proyecto, archivar, exportar/importar un solo proyecto.
-=======
 - Descartado por el usuario: cortes de clips del podcast y publicación automática. No proponerlos.
->>>>>>> origin/chore/progress-descartados
 - Voz: local gratis + opción en línea después. Audio de revisión: cifrado y temporal.
 - Revisión de transcripción: solo los tramos elegidos. Entregables: todas las opciones, seleccionables.
 - Verificación: búsqueda gratis primero, IA solo para lo pendiente; sin buscador con clave; el render se bloquea con escenas pendientes.
