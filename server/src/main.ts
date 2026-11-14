@@ -11,10 +11,10 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
   Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
-  OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
+  OUTPUT_SCHEMAS, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
-import { isRenderId, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
+import { isRenderId, renderCarouselSlide, renderFile, renderFrame, renderStatus, startRender } from './render.ts';
 import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
 import { analyzeReference } from './reference.ts';
@@ -131,6 +131,11 @@ const musicFor = (s: { vault: Vault; token: string }): { url: string } & MusicMi
   return m.track && musicExists(DATA_DIR, m.track.id) ? { url: musicUrl(PORT, s.token, m.track.id), ...normalizeMix(m.mix) } : undefined;
 };
 const creditsWithArt = (scenes: { text: string }[], s: { vault: Vault }) => ({ ...creditsFrom(scenes, projectChecks(s)), images: artCredits(scenes, projectArt(s), textKey), music: musicFor(s as { vault: Vault; token: string }) ? musicCredits(projectMusic(s).track) : [], video: brollCredits(scenes, projectBroll(s), textKey) });
+/** Slides sent by the app (text + the scene wording they came from), bounded. Art and B-roll are looked up here, never taken from the client. */
+const parseSlides = (raw: unknown, fallback: { text: string }[]): SlideDraft[] =>
+  Array.isArray(raw) ? raw.slice(0, 40).map((x: { text?: unknown; origin?: unknown }) => ({ text: String(x?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 300), origin: typeof x?.origin === 'string' ? x.origin.slice(0, 300) : undefined })) : slidesFromScenes(fallback);
+const slideMedia = (drafts: SlideDraft[], s: { vault: Vault; token: string }, sourcesText?: string): SlideSpec[] =>
+  toSlideSpecs(withBroll(withArt(drafts.map((d) => ({ text: d.origin ?? d.text, durationSec: 3, slideText: d.text })), s), s).map((x) => ({ text: x.slideText, art: x.art, broll: x.broll })), sourcesText);
 const pendingMessage = (n: number) => `Hay ${n} escena(s) sin verificar. Verifica sus fuentes o márcalas como opinión en el paso de producción.`;
 const selftest: { running: boolean; full: boolean; results: CheckResult[] } = { running: false, full: false, results: [] };
 
@@ -396,7 +401,7 @@ const server = createServer(async (req, res) => {
       const file = join(packageDir(DATA_DIR, dm[1]!), dm[2]!);
       if (!existsSync(file)) return json(res, 404, { error: 'Not found' });
       const ext = extname(file);
-      const type = ext === '.png' ? 'image/png' : ext === '.wav' ? 'audio/wav' : ext === '.srt' ? 'application/x-subrip; charset=utf-8' : 'text/plain; charset=utf-8';
+      const type = ext === '.png' ? 'image/png' : ext === '.wav' ? 'audio/wav' : ext === '.srt' ? 'application/x-subrip; charset=utf-8' : ext === '.zip' ? 'application/zip' : 'text/plain; charset=utf-8';
       return sendFile(req, res, file, type, url.searchParams.get('dl') ? dm[2]! : undefined);
     }
     if ((fm || am) && req.method === 'GET') {
@@ -544,6 +549,21 @@ const server = createServer(async (req, res) => {
       const id = randomBytes(8).toString('hex');
       try {
         await renderFrame({ ...spec.data, fonts: userFontsFor(spec.data.style, s), scenes: withBroll(withArt(spec.data.scenes.slice(0, 1).map(({ text, durationSec }) => ({ text, durationSec })), s), s).map((x) => ({ ...x, speechSec: Math.min(x.durationSec - 0.5, 4) })) }, join(DATA_DIR, 'renders', `${id}.png`), DATA_DIR, ROOT);
+        return json(res, 200, { url: `/api/preview/${id}.png` });
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo generar la vista previa' });
+      }
+    }
+    if (url.pathname === '/api/carousel/preview' && req.method === 'POST') {
+      const b = await readBody(req);
+      const style = VideoSpec.shape.style.safeParse(b.style);
+      const drafts = parseSlides(b.slides, []);
+      const index = Math.max(0, Math.min(drafts.length - 1, Number(b.index) || 0));
+      const bad = validateSlides(drafts);
+      if (!style.success || bad) return json(res, 400, { error: bad ?? 'Vista previa inválida' });
+      const id = randomBytes(8).toString('hex');
+      try {
+        await renderCarouselSlide({ slides: slideMedia(drafts, s), style: style.data, fonts: userFontsFor(style.data, s) }, index, join(DATA_DIR, 'renders', `${id}.png`), DATA_DIR, ROOT);
         return json(res, 200, { url: `/api/preview/${id}.png` });
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No se pudo generar la vista previa' });
@@ -786,8 +806,18 @@ const server = createServer(async (req, res) => {
       const g = gate(baseScenes, projectChecks(s));
       if (!g.ok) return json(res, 409, { error: pendingMessage(g.pending.length) });
       const credits = creditsWithArt(baseScenes, s);
+      const card = credits.sources.length || credits.images.length || credits.music.length || credits.video.length ? { text: creditCardText(credits), durationSec: 6 } : undefined;
+      let slides: SlideSpec[] | undefined;
+      if (b.items.includes('carousel')) {
+        const drafts = parseSlides(b.slides, baseScenes);
+        const bad = validateSlides(drafts, card ? 1 : 0);
+        if (bad) return json(res, 400, { error: bad });
+        const pend = carouselGate(drafts, projectChecks(s));
+        if (pend.length) return json(res, 409, { error: `La(s) lámina(s) ${pend.map((i) => i + 1).join(', ')} tienen cifras o datos sin verificar (texto editado o dividido). Verifica sus fuentes o quita las cifras.` });
+        slides = slideMedia(drafts, s, card?.text);
+      }
       const request: PackageRequest = {
-        card: credits.sources.length || credits.images.length || credits.music.length || credits.video.length ? { text: creditCardText(credits), durationSec: 6 } : undefined,
+        card, slides,
         items: b.items, scenes: withBroll(withArt(baseScenes, s), s), theme: base.data.theme, style: base.data.style, fonts: userFontsFor(base.data.style, s), music: musicFor(s),
         shorts: Array.isArray(b.shorts) ? b.shorts.map((r: { from: number; to: number }) => ({ from: Number(r.from), to: Number(r.to) })) : [],
         title: String(b.title ?? '').slice(0, 120), subtitle: b.subtitle ? String(b.subtitle).slice(0, 60) : undefined,

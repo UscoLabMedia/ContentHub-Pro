@@ -4,6 +4,7 @@ import type { Scene } from './production.ts';
 export const DELIVERABLES = [
   { id: 'long', label: 'Video largo 16:9', hint: 'Horizontal 1920×1080, para YouTube. Se monetiza a partir de unos 8 minutos.', preset: 'youtube_long' },
   { id: 'shorts', label: 'Shorts verticales 9:16', hint: 'Vertical 1080×1920 de hasta 60 s para TikTok, Reels y YouTube Shorts. Eliges qué escenas lleva cada uno.', preset: 'youtube_short' },
+  { id: 'carousel', label: 'Carrusel de Instagram 4:5', hint: 'Láminas PNG 1080×1350 numeradas (portada con el gancho, cierre con la llamada a la acción) y un .zip, más el pie sugerido. Puedes editar, reordenar y quitar láminas.' },
   { id: 'thumbnail', label: 'Miniatura 1280×720', hint: 'Imagen PNG con tu título para YouTube.' },
   { id: 'description', label: 'Descripción para YouTube', hint: 'Texto con resumen, capítulos con tiempos, fuentes y hashtags.' },
   { id: 'voice', label: 'Voz sola (WAV)', hint: 'La narración como un solo archivo alineado con el video, para mejorarla en otra app (debe volver con la misma duración).' },

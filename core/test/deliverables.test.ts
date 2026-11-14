@@ -65,6 +65,6 @@ describe('description and chapters', () => {
   });
   it('slug and catalog', () => {
     expect(slug('¿Cómo funciona el GPS?')).toBe('como-funciona-el-gps');
-    expect(DELIVERABLES.map((d) => d.id)).toEqual(['long', 'shorts', 'thumbnail', 'description', 'voice', 'subtitles']);
+    expect(DELIVERABLES.map((d) => d.id)).toEqual(['long', 'shorts', 'carousel', 'thumbnail', 'description', 'voice', 'subtitles']);
   });
 });
