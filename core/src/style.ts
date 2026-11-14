@@ -87,6 +87,11 @@ export function wordTimings(text: string, startSec: number, spanSec: number): Ti
   });
 }
 
+/** Uses the times the voice reported (one per word) when they match the words shown; otherwise keeps the estimate. */
+export function withSpokenTimes(words: TimedWord[], times?: { from: number; to: number }[]): TimedWord[] {
+  return times && times.length === words.length ? words.map((w, i) => ({ ...w, from: times[i]!.from, to: times[i]!.to })) : words;
+}
+
 /** Rough speaking time of a text when there is no audio (about 190 words per minute). */
 export const readingSeconds = (text: string): number => Math.max(1, text.trim().split(/\s+/).length / 3.2);
 

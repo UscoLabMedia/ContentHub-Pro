@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Easing, Img, Loop, OffthreadVideo, interpolate, random, spring } from 'remotion';
 import { animFor, captionsOf, fontInfo, isUserFont } from '@chp/core/subtitles';
-import { captionGroups, formatCount, wordTimings, readingSeconds, type CameraKind, type HeroNumber, type StyleProfile } from '@chp/core/style';
+import { captionGroups, formatCount, withSpokenTimes, wordTimings, readingSeconds, type CameraKind, type HeroNumber, type StyleProfile } from '@chp/core/style';
 
 export interface Cam {
   s: number;
@@ -150,10 +150,10 @@ const readable = (hex: string) => {
 };
 
 /** Subtitles: up to N words at a time; the spoken word is marked; each group enters with the scene's animation. */
-export const Karaoke = ({ text, style, frame, fps, speechSec, durationSec, width, height, index }: { text: string; style: StyleProfile; frame: number; fps: number; speechSec?: number; durationSec: number; width: number; height: number; index: number }) => {
+export const Karaoke = ({ text, style, frame, fps, speechSec, wordTimes, durationSec, width, height, index }: { text: string; wordTimes?: { from: number; to: number }[]; style: StyleProfile; frame: number; fps: number; speechSec?: number; durationSec: number; width: number; height: number; index: number }) => {
   const cap = captionsOf(style);
   const span = Math.max(0.6, Math.min(speechSec ?? readingSeconds(text), durationSec - 0.35));
-  const words = wordTimings(text, 0.15, span);
+  const words = withSpokenTimes(wordTimings(text, 0.15, span), wordTimes);
   const groups = captionGroups(words, cap.wordsPerGroup);
   const t = frame / fps;
   let g = 0;

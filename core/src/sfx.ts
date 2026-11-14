@@ -3,7 +3,7 @@
 import { SFX_RECIPES, AMBIENT_RECIPES, SR, synthSfx } from './sfx-synth.ts';
 import { captionsOf } from './subtitles.ts';
 import { animFor, SUB_ANIMS, type SubAnim } from './subtitles.ts';
-import { captionGroups, heroNumber, readingSeconds, wordTimings, type StyleProfile } from './style.ts';
+import { captionGroups, heroNumber, readingSeconds, withSpokenTimes, wordTimings, type StyleProfile } from './style.ts';
 import { musicGain, speechWindows, type MusicMix } from './music.ts';
 
 export type SfxCategory = 'transition' | 'accent' | 'click' | 'ambient';
@@ -79,7 +79,7 @@ export function normalizeSfx(x: Partial<SfxConfig> | undefined | null): SfxConfi
 }
 
 // ---------------------------------------------------------------------------- events
-export interface SfxScene { text: string; durationSec: number; speechSec?: number; card?: boolean; art?: unknown }
+export interface SfxScene { text: string; durationSec: number; speechSec?: number; wordTimes?: { from: number; to: number }[]; card?: boolean; art?: unknown }
 export interface SfxEvent { t: number; sound: string; gain: number }
 
 /** When each sound plays, from the final timeline (scene lengths already stretched to the narration). */
@@ -103,7 +103,7 @@ export function sfxEvents(scenes: SfxScene[], style: Pick<StyleProfile, 'caption
         const sound = cfg.captions.byAnimation[animFor(cap, i)] ?? 'none';
         if (sound !== 'none') {
           const span = Math.max(0.6, Math.min(sc.speechSec ?? readingSeconds(sc.text), sc.durationSec - 0.35));
-          const words = wordTimings(sc.text, 0.15, span);
+          const words = withSpokenTimes(wordTimings(sc.text, 0.15, span), sc.wordTimes);
           if (cfg.captions.mode === 'word') for (const w of words) out.push({ t: start + w.from, sound, gain: 0.45 });
           else for (const g of captionGroups(words, cap.wordsPerGroup)) out.push({ t: start + g[0]!.from, sound, gain: 0.6 });
         }

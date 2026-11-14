@@ -23,6 +23,8 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 
 | #14 | `feat/broll` | Video de stock (B-roll) como fondo de escena: Commons, Internet Archive, NASA, Pexels y Pixabay (claves gratuitas), créditos | abierto |
 
+| #16 | `feat/online-voices` | Voces en línea (Edge y Azure), tono/estilo, pausas y énfasis, tiempos por palabra en el karaoke | abierto |
+
 ## Decisiones tomadas (no volver a preguntar)
 
 - Voz: local gratis + opción en línea después. Audio de revisión: cifrado y temporal.
@@ -36,7 +38,7 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 ## Pendiente
 
 - Voces en línea y clonación (SIGUIENTE; diseño decidido, en 3 etapas, cada una su rama y PR):
-  1. `feat/online-voices`: voces en línea para elegir y escuchar muestras: Edge (gratis, no oficial, tiempos por palabra; riesgo de ToS) + Azure AI Speech (oficial, clave gratuita guardada cifrada; estilos y ajustes). Ajustes: tono y velocidad, estilo/emoción (según el motor), pausas y énfasis por palabra (marcas en el guion). Mejor karaoke con los tiempos por palabra.
+  1. (HECHO en `feat/online-voices`, PR #16) voces en línea para elegir y escuchar muestras: Edge (gratis, no oficial, tiempos por palabra; riesgo de ToS) + Azure AI Speech (oficial, clave gratuita guardada cifrada; estilos y ajustes). Ajustes: tono y velocidad, estilo/emoción (según el motor), pausas y énfasis por palabra (marcas en el guion). Mejor karaoke con los tiempos por palabra.
   2. `feat/local-voices`: voz local gratis desde GitHub: Kokoro (Apache 2.0, español: Dora/Alex/Santa, corre en CPU); evaluar RosaritoRD/local-voice (MIT, Kokoro+Piper con API). Confirmar licencia de pesos en la ficha oficial.
   3. `feat/voice-cloning`: subir una muestra y clonarla en local, según el equipo: sin GPU OpenVoice v2 (MIT), con GPU Chatterbox (MIT; confirmar que siga mantenido). Reglas: solo tu voz o con permiso escrito, casilla de confirmación obligatoria y nota de consentimiento guardada en la bóveda; sin imitar a personas públicas. Descartar XTTS-v2 y F5-TTS (pesos no comerciales).
   Nota: sin red, GPU ni Windows en la sesión, estas etapas solo se prueban con fixtures; se necesita probar en el PC del usuario.
@@ -44,6 +46,7 @@ Estado del proyecto. Estado vigente: **`main`** (PRs #1–#10 fusionados). Cada 
 - B-roll: Unsplash solo tiene fotos (no se usó; podría ser otra fuente de ilustraciones). Probado solo con fixtures locales: faltan pruebas reales con Pexels/Pixabay (claves), Commons, Internet Archive y NASA.
 - Ilustraciones: probar búsqueda real en Openverse/Commons (sin red en la sesión; solo probado con fixture local).
 - Música y efectos: pistas libres/CC-BY con créditos en pantalla y descripción, ducking, SFX. Preguntar antes.
+- Voces en línea: probado solo con proveedores simulados y un servidor de prueba de Azure; faltan pruebas reales con Edge y con una clave de Azure. Azure REST no da tiempos por palabra (se usa la estimación).
 - Menores: carruseles de Instagram, cortes de podcast, publicación automática.
 
 ## Límites conocidos / sin verificar

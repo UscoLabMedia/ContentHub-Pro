@@ -10,7 +10,7 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
@@ -19,6 +19,7 @@ import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
 import { analyzeReference } from './reference.ts';
 import { brollExists, brollPath, brollUrl, downloadBroll } from './broll.ts';
+import { azureProvider, edgeProvider, fakeEdgeProvider, validAzure, type AzureConfig } from './voice-online.ts';
 import { buildSfxTrack, sfxTrackPath } from './sfx.ts';
 import { downloadMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
 import { ART_MIME, artExists, artPath, artUrl, downloadArt, saveDrawn } from './art.ts';
@@ -34,7 +35,17 @@ const DIST = join(ROOT, 'app', 'dist');
 const MIN_PASSWORD = 8;
 const MAX_UPLOAD = 4 * 1024 ** 3;
 
-const tts = new Tts(DATA_DIR, process.env.CHP_PIPER_BIN);
+/** The online services available right now: Edge always, Azure when the person saved a key (kept in the encrypted vault). */
+const edgeSvc = process.env.CHP_ONLINE_FAKE === '1' ? fakeEdgeProvider() : edgeProvider(DATA_DIR);
+const azureConfig = (): AzureConfig | null => {
+  const c = session?.vault.get<AzureConfig>('azureSpeech');
+  return c && validAzure(c) ? c : null;
+};
+const onlineProviders = (): OnlineProvider[] => {
+  const a = azureConfig();
+  return [edgeSvc, ...(a ? [azureProvider(a, process.env.CHP_AZURE_BASE)] : [])];
+};
+const tts = new Tts(DATA_DIR, process.env.CHP_PIPER_BIN, onlineProviders);
 let radarCache: { at: number; data: Awaited<ReturnType<typeof fetchRadar>> } | null = null;
 
 interface VoiceJob {
@@ -415,10 +426,28 @@ const server = createServer(async (req, res) => {
       if ([...voiceJobs.values()].some((j) => j.status === 'working')) return json(res, 409, { error: 'Ya se está generando una voz; espera un momento' });
       const job: VoiceJob = { id: randomBytes(8).toString('hex'), status: 'working', progress: 1, label: 'En cola' };
       voiceJobs.set(job.id, job);
-      tts.synth(b.voiceId, text, Number(b.speed) || 1, (p, l) => Object.assign(job, { progress: p, label: l }))
+      tts.synth(b.voiceId, text, normalizeTuning({ speed: Number(b.speed) || 1, pitch: Number(b.pitch) || 0, style: typeof b.style === 'string' ? b.style : '' }), (p, l) => Object.assign(job, { progress: p, label: l }))
         .then((n) => Object.assign(job, { status: 'done', progress: 100, hash: n.hash, durationSec: n.durationSec }))
         .catch((e: unknown) => Object.assign(job, { status: 'error', error: e instanceof Error ? e.message : String(e) }));
       return json(res, 200, job);
+    }
+    // online voices: Edge needs nothing; Azure uses the person's own key (write-only, stored encrypted)
+    if (url.pathname === '/api/voice/online' && req.method === 'GET') {
+      const a = azureConfig();
+      return json(res, 200, { edge: true, azure: { configured: !!a, region: a?.region ?? '' } });
+    }
+    if (url.pathname === '/api/voice/online/azure' && req.method === 'PUT') {
+      const b = await readBody(req);
+      const cfg = { key: String(b.key ?? '').trim(), region: String(b.region ?? '').trim().toLowerCase() };
+      if (!validAzure(cfg)) return json(res, 400, { error: 'La clave o la región de Azure no parecen válidas (la región es algo como eastus o brazilsouth)' });
+      s.vault.set('azureSpeech', cfg);
+      await s.vault.save();
+      return json(res, 200, { configured: true, region: cfg.region });
+    }
+    if (url.pathname === '/api/voice/online/azure' && req.method === 'DELETE') {
+      s.vault.set('azureSpeech', null);
+      await s.vault.save();
+      return json(res, 200, { configured: false, region: '' });
     }
     const vm = url.pathname.match(/^\/api\/voice\/([a-f0-9]{16})$/);
     if (vm && req.method === 'GET') return voiceJobs.has(vm[1]!) ? json(res, 200, voiceJobs.get(vm[1]!)) : json(res, 404, { error: 'Not found' });
@@ -732,7 +761,7 @@ const server = createServer(async (req, res) => {
       if (credits.video.length) request.extra = [...(request.extra ?? []), 'Video:', ...credits.video.map((c) => `- ${c}`)];
       try {
         return json(res, 200, await startPackage(request, { dataDir: DATA_DIR, root: ROOT, narration: voice ? {
-          tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
+          tts, voiceId: voice.id, speed: Number(voice.speed) || 1, pitch: Number(voice.pitch) || 0, style: typeof voice.style === 'string' ? voice.style : '',
           audioUrl: (hash) => `http://127.0.0.1:${PORT}/api/audio/${hash}.wav?s=${s.token}`,
         } : undefined, extras: { sfx: sfxFor(s) } }));
       } catch (e) {
@@ -760,7 +789,7 @@ const server = createServer(async (req, res) => {
       const voice = b.voice && typeof b.voice.id === 'string' ? b.voice : null;
       try {
         return json(res, 200, await startRender(clean, b.quality, DATA_DIR, ROOT, voice ? {
-          tts, voiceId: voice.id, speed: Number(voice.speed) || 1,
+          tts, voiceId: voice.id, speed: Number(voice.speed) || 1, pitch: Number(voice.pitch) || 0, style: typeof voice.style === 'string' ? voice.style : '',
           audioUrl: (hash) => `http://127.0.0.1:${PORT}/api/audio/${hash}.wav?s=${s.token}`,
         } : undefined, { sfx: sfxFor(s) }));
       } catch (e) {

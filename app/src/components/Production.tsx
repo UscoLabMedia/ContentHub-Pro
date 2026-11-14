@@ -125,6 +125,7 @@ export function StepProduction({ project, set }: P) {
           </div>
         ))}
         <button className={secondary} onClick={() => setProd({ scenes: [...prod.scenes, { text: '', durationSec: 3 }] })}>+ Añadir escena</button>
+        <p className="text-[11px] text-slate-500">Marcas para la voz (no salen en pantalla): <code className="rounded bg-slate-800 px-1">[pausa 1s]</code> para un silencio y <code className="rounded bg-slate-800 px-1">*palabra*</code> para darle énfasis.</p>
       </div>
 
       <p className={`text-xs ${preset && preset.maxSeconds && total > preset.maxSeconds ? 'text-amber-400' : 'text-slate-400'}`}>
