@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReviewLine } from '@chp/core/review';
-import { mergeLines, lineIdsInRange } from '@chp/core/review';
+import { mergeLines, lineIdsInRange, keptMask, keptText, wordSpans, TRIM_PAD, type WordSpan } from '@chp/core/review';
 import { api, getToken, type SourceView } from '../api.ts';
 
 interface LinesResponse {
@@ -9,7 +9,7 @@ interface LinesResponse {
   reviewed: boolean;
 }
 interface IdeasResponse {
-  data: { ideas: { title: string; startSec: number; endSec: number }[] };
+  data: { ideas: { title: string; startSec: number; endSec: number; why?: string; score?: number }[] };
 }
 type Mode = 'ok' | 'edit' | 'unclear' | null;
 interface Draft {
@@ -19,9 +19,14 @@ interface Draft {
   text: string;
   flags: string[];
   mode: Mode;
+  /** Every word of the passage with its estimated time, and the passage as first chosen (trims only ever remove from it). */
+  spans: WordSpan[];
+  full: { startSec: number; endSec: number };
 }
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const mmss1 = (s: number) => `${mmss(s)}.${Math.floor((s % 1) * 10)}`;
+const MIN_PASSAGE = 0.3;
 const btn = 'rounded-lg border border-slate-700 px-3 py-2 text-xs hover:bg-slate-800 disabled:opacity-40';
 const primary = 'rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40';
 
@@ -51,11 +56,11 @@ export function TranscriptReview({ source, onClose, onDone }: { source: SourceVi
   const lines = data?.lines ?? [];
   const chosenSeconds = useMemo(() => lines.filter((l) => selected.has(l.id)).reduce((s, l) => s + (l.end - l.start), 0), [lines, selected]);
 
-  const play = (start: number, end: number) => {
+  const play = (start: number, end: number, pad = 0.4) => {
     const a = audio.current;
     if (!a) return;
-    a.currentTime = Math.max(0, start - 0.4);
-    stopAt.current = end + 0.4;
+    a.currentTime = Math.max(0, start - pad);
+    stopAt.current = end + pad;
     void a.play().catch(() => {});
   };
   const onTime = () => {
@@ -97,13 +102,23 @@ export function TranscriptReview({ source, onClose, onDone }: { source: SourceVi
 
   const startReview = () => {
     const blocks = mergeLines(lines, [...selected]);
-    setDrafts(blocks.map((b) => ({ startSec: b.startSec, endSec: b.endSec, original: b.text, text: b.text, flags: b.flags, mode: null })));
+    setDrafts(blocks.map((b) => ({ startSec: b.startSec, endSec: b.endSec, original: b.text, text: b.text, flags: b.flags, mode: null, spans: wordSpans(lines.filter((l) => b.lineIds.includes(l.id))), full: { startSec: b.startSec, endSec: b.endSec } })));
     setIdx(0);
     setStage('review');
   };
 
   const setDraft = (patch: Partial<Draft>) => setDrafts((d) => d.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
   const cur = drafts[idx];
+  const [sel, setSel] = useState<number | null>(null);
+  useEffect(() => setSel(null), [idx, stage]);
+  /** Moves the start and/or end of the passage (only inward from what was chosen). The text follows the words that stay. */
+  const retime = (startSec: number, endSec: number) => {
+    if (!cur) return;
+    const a = Math.max(cur.full.startSec, Math.min(startSec, cur.full.endSec - MIN_PASSAGE));
+    const b = Math.min(cur.full.endSec, Math.max(endSec, a + MIN_PASSAGE));
+    const original = keptText(cur.spans, a, b);
+    setDraft({ startSec: a, endSec: b, original, text: cur.text === cur.original ? original : cur.text });
+  };
   const allDecided = drafts.length > 0 && drafts.every((d) => d.mode !== null);
   const unresolved = drafts.filter((d) => d.mode === 'unclear' && !d.text.trim()).length;
 
@@ -155,8 +170,9 @@ export function TranscriptReview({ source, onClose, onDone }: { source: SourceVi
                 <ul className="mt-2 space-y-1">
                   {sugg.map((i, k) => (
                     <li key={k} className="flex items-center gap-2 text-xs">
+                      {i.score !== undefined && <span className="shrink-0 rounded bg-emerald-500/20 px-2 py-0.5 font-semibold text-emerald-300" title="Qué tan interesante, viral, curioso, relevante y significativo es (1-10)">★ {i.score}</span>}
                       <span className="text-slate-500">{mmss(i.startSec)}–{mmss(i.endSec)}</span>
-                      <span className="flex-1 text-slate-300">{i.title}</span>
+                      <span className="flex-1 text-slate-300">{i.title}{i.why && <span className="block text-[11px] text-slate-500">{i.why}</span>}</span>
                       <button className={btn} onClick={() => setSelected((p) => new Set([...p, ...lineIdsInRange(lines, i.startSec, i.endSec)]))}>Elegir</button>
                     </li>
                   ))}
@@ -193,11 +209,31 @@ export function TranscriptReview({ source, onClose, onDone }: { source: SourceVi
             </div>
             {data.hasAudio && (
               <div className="flex gap-2">
-                <button className={primary} onClick={() => play(cur.startSec, cur.endSec)}>▶ Escuchar este tramo</button>
-                <button className={btn} onClick={() => play(Math.max(0, cur.endSec - 6), cur.endSec)}>Repetir el final</button>
+                <button className={primary} onClick={() => play(cur.startSec, cur.endSec, 0)}>▶ Escuchar este tramo</button>
+                <button className={btn} onClick={() => play(Math.max(0, cur.endSec - 6), cur.endSec, 0)}>Repetir el final</button>
               </div>
             )}
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm text-slate-200">{cur.original}</div>
+            {cur.spans.length > 0 ? (
+              <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950 p-3">
+                <p className="text-[11px] text-slate-500">¿Sobran palabras al inicio o al final? Toca una palabra y elige dónde empezar o terminar. Los tiempos por palabra son estimados: afina escuchando, pausando en el punto exacto y usando «empieza aquí» o «termina aquí».</p>
+                <p className="text-sm leading-7 text-slate-200" aria-label="Palabras del tramo">
+                  {cur.spans.map((w, i) => {
+                    const kept = keptMask(cur.spans, cur.startSec, cur.endSec)[i];
+                    return <span key={i}><button onClick={() => setSel(sel === i ? null : i)} aria-pressed={sel === i} className={`rounded px-0.5 ${kept ? '' : 'text-slate-600 line-through'} ${sel === i ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>{w.word}</button>{' '}</span>;
+                  })}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button className={btn} disabled={sel === null} onClick={() => sel !== null && retime(cur.spans[sel]!.from - TRIM_PAD, cur.endSec)}>Empezar desde esta palabra</button>
+                  <button className={btn} disabled={sel === null} onClick={() => sel !== null && retime(cur.startSec, cur.spans[sel]!.to + TRIM_PAD)}>Terminar en esta palabra</button>
+                  {data.hasAudio && <button className={btn} disabled={time < cur.full.startSec || time >= cur.endSec - MIN_PASSAGE} onClick={() => retime(time, cur.endSec)}>El tramo empieza aquí ({mmss1(time)})</button>}
+                  {data.hasAudio && <button className={btn} disabled={time <= cur.startSec + MIN_PASSAGE || time > cur.full.endSec} onClick={() => retime(cur.startSec, time)}>El tramo termina aquí ({mmss1(time)})</button>}
+                  <button className={btn} disabled={cur.startSec === cur.full.startSec && cur.endSec === cur.full.endSec} onClick={() => retime(cur.full.startSec, cur.full.endSec)}>Quitar recortes</button>
+                </div>
+                <p className="text-xs text-slate-400">Se usará desde {mmss1(cur.startSec)} hasta {mmss1(cur.endSec)} ({(cur.endSec - cur.startSec).toFixed(1)} s)</p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm text-slate-200">{cur.original}</div>
+            )}
             <fieldset className="space-y-2 text-sm">
               <legend className="mb-1 text-xs font-semibold text-slate-300">¿Esto es lo que dice el audio?</legend>
               <label className="flex items-center gap-2"><input type="radio" name="mode" checked={cur.mode === 'ok'} onChange={() => setDraft({ mode: 'ok', text: cur.original })} /> Sí, está bien</label>

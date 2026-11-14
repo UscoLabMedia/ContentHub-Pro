@@ -84,3 +84,44 @@ export const blocksToLines = (blocks: ReviewBlock[]): string[] => blocks.filter(
 /** Which lines overlap a time range (to pre-select what the AI suggested). */
 export const lineIdsInRange = (lines: ReviewLine[], startSec: number, endSec: number): number[] =>
   lines.filter((l) => l.end > startSec && l.start < endSec).map((l) => l.id);
+
+// ---------------------------------------------------------------------------- trimming a passage by words
+export interface WordSpan {
+  word: string;
+  from: number;
+  to: number;
+}
+/** A little air before/after a word so a cut never clips its first or last sound. */
+export const TRIM_PAD = 0.03;
+
+/**
+ * Time of each word of some lines. Only an ESTIMATE (the transcript is timed per segment, not per word):
+ * inside a line the words share its time by length. The person fine-tunes the cut by ear.
+ */
+export function wordSpans(lines: { start: number; end: number; text: string }[]): WordSpan[] {
+  const out: WordSpan[] = [];
+  for (const l of lines) {
+    const words = l.text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const weight = words.map((w) => Math.max(1, w.length));
+    const total = weight.reduce((a, b) => a + b, 0) || 1;
+    let at = l.start;
+    words.forEach((word, i) => {
+      const d = ((l.end - l.start) * weight[i]!) / total;
+      out.push({ word, from: at, to: at + d });
+      at += d;
+    });
+  }
+  return out;
+}
+
+/** Which words are still inside [startSec, endSec]: those that overlap it for more than half of their time. */
+export const keptMask = (spans: WordSpan[], startSec: number, endSec: number): boolean[] =>
+  spans.map((w) => {
+    const len = Math.max(1e-6, w.to - w.from);
+    return (Math.min(w.to, endSec) - Math.max(w.from, startSec)) / len > 0.5;
+  });
+
+export const keptText = (spans: WordSpan[], startSec: number, endSec: number): string => {
+  const m = keptMask(spans, startSec, endSec);
+  return spans.filter((_, i) => m[i]).map((w) => w.word).join(' ');
+};
