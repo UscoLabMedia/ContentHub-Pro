@@ -15,6 +15,7 @@ import { edgeProvider } from './voice-online.ts';
 import { KokoroEngine } from './kokoro.ts';
 import { cloneDir } from './voiceclone.ts';
 import { cutClip, dropOriginal, hasOriginal, keepOriginal } from './original.ts';
+import { imagegenStatus } from './imagegen.ts';
 import { searchBroll, FONTS, SFX_LIBRARY, MOODS, synthMusic, synthSfx, searchArt, searchFree, searchMusic } from '@chp/core';
 import { existsSync } from 'node:fs';
 
@@ -170,6 +171,11 @@ export const CHECKS: Check[] = [
   { id: 'sfx', label: 'Efectos de sonido (generados en tu PC)', group: 'Video', run: async () => {
     for (const x of SFX_LIBRARY) if (synthSfx(x.id).length < 100) throw new Error(`El sonido «${x.label}» salió vacío`);
     return `${SFX_LIBRARY.length} sonidos generados correctamente`;
+  } },
+  { id: 'imagegen', label: 'Imágenes generadas en tu PC (opcional)', group: 'Video', run: async (c) => {
+    const st = await imagegenStatus(c.dataDir);
+    if (!st.installed) throw new Warn(`No instalado (opcional). Copia stable-diffusion.cpp y un modelo en ${st.dir}`);
+    return `Listo: ${st.bin} + ${st.model} (${st.settings.size}px, ${st.settings.steps} pasos)`;
   } },
   { id: 'music-gen', label: 'Música generada (sin licencias, en tu PC)', group: 'Video', run: async () => {
     for (const m of MOODS) if (synthMusic(m.id).length < 44100 * 10) throw new Error(`La música «${m.label}» salió vacía`);

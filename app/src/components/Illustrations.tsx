@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { textKey } from '@chp/core/verification';
 import type { ArtCandidate, ArtRef } from '@chp/core/illustrations';
 import { api, getToken } from '../api.ts';
@@ -23,6 +23,10 @@ export function Illustrations({ project, set }: P) {
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
+  const [gen, setGen] = useState<{ installed: boolean; dir: string } | null>(null);
+  useEffect(() => {
+    api<{ installed: boolean; dir: string }>('/api/imagegen/status').then(setGen).catch(() => {});
+  }, []);
 
   const put = (patch: Record<string, ArtRef | null>) => {
     const next = { ...project.art };
@@ -103,6 +107,26 @@ export function Illustrations({ project, set }: P) {
     setBusy('');
   };
 
+  /** One image made on this PC by the optional engine (slow: seconds to minutes per image). */
+  const generate = async (key: string, text: string) => {
+    setErr('');
+    setBusy(key);
+    setMsg('Generando la imagen en tu PC… puede tardar unos minutos.');
+    try {
+      let i = info[key];
+      if (!i) i = (await queries())[key];
+      const query = i?.query || text.slice(0, 60);
+      const look = style.paperCut ?? style.background === 'paper' ? 'paper' : 'flat';
+      setInfo((p) => (p[key] ? { ...p, [key]: { ...p[key]!, cands: null } } : p));
+      put({ [key]: (await api<{ art: ArtRef }>('/api/art/generate', { method: 'POST', json: { query, look } })).art });
+      setMsg('Imagen generada y puesta en la escena.');
+    } catch (e) {
+      setErr((e as Error).message);
+      setMsg('');
+    }
+    setBusy('');
+  };
+
   const draw = async (key: string, text: string) => {
     setErr('');
     setBusy(key);
@@ -129,6 +153,12 @@ export function Illustrations({ project, set }: P) {
         {Object.keys(art).length > 0 && <button className={secondary} disabled={!!busy} onClick={() => put(Object.fromEntries(Object.keys(art).map((k) => [k, null])))}>Quitar todas</button>}
       </div>
       {msg && <p className="text-xs text-slate-300" role="status">{msg}</p>}
+      {gen && !gen.installed && (
+        <details className="text-xs text-slate-400">
+          <summary className="cursor-pointer text-slate-300">Generar imágenes en tu PC (opcional, sin enviar nada a internet)</summary>
+          <p className="mt-1">Copia en la carpeta <code className="break-all text-slate-300">{gen.dir}</code> el programa <b>stable-diffusion.cpp</b> (<code>sd.exe</code> o <code>sd-cli.exe</code>, con sus archivos) y <b>un</b> modelo (<code>.safetensors</code> o <code>.gguf</code>). Después recarga esta pantalla y aparecerá «Generar imagen (local)» en cada escena. Es lento sin tarjeta gráfica y cada modelo trae su propia licencia: revísala antes de monetizar. Las imágenes salen rotuladas «generada con IA» en los créditos.</p>
+        </details>
+      )}
       <ul className="space-y-2">
         {scenes.map((sc, i) => {
           const k = textKey(sc.text);
@@ -141,11 +171,12 @@ export function Illustrations({ project, set }: P) {
                 {a ? <img src={fileUrl(a)} alt={`Ilustración de la escena ${i + 1}`} className="h-14 w-14 rounded bg-slate-800 object-contain" /> : <span className="flex h-14 w-14 items-center justify-center rounded bg-slate-900 text-slate-600">—</span>}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-slate-300">{sc.text}</p>
-                  {a && <p className="text-[11px] text-slate-500">{a.origin === 'ai' ? 'Dibujo de IA' : a.credit ? `Crédito: ${a.credit}` : `${a.title} (sin crédito obligatorio)`}</p>}
+                  {a && <p className="text-[11px] text-slate-500">{a.origin === 'gen' ? 'Imagen generada con IA en tu PC' : a.origin === 'ai' ? 'Dibujo de IA' : a.credit ? `Crédito: ${a.credit}` : `${a.title} (sin crédito obligatorio)`}</p>}
                   {!a && info[k] && cands && cands.length === 0 && <p className="text-[11px] text-amber-400">Sin imagen libre para «{info[k]!.query}».</p>}
                   <div className="mt-1 flex flex-wrap gap-1">
                     <button className={secondary} disabled={!!busy} onClick={() => void more(k, sc.text)}>{busy === k ? '…' : a ? 'Otra imagen' : 'Buscar'}</button>
                     <button className={secondary} disabled={!!busy} onClick={() => void draw(k, sc.text)}>Dibujar con IA</button>
+                    {gen?.installed && <button className={secondary} disabled={!!busy} onClick={() => void generate(k, sc.text)} title="Genera una imagen nueva en tu PC con el motor local">Generar imagen (local)</button>}
                     {a && <button className={secondary} disabled={!!busy} onClick={() => put({ [k]: null })} aria-label={`Quitar ilustración ${i + 1}`}>✕</button>}
                   </div>
                 </div>

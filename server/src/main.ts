@@ -24,6 +24,7 @@ import { KokoroEngine } from './kokoro.ts';
 import { ProfileError, VoiceCloneEngine, VoiceProfiles } from './voiceclone.ts';
 import { azureProvider, edgeProvider, fakeEdgeProvider, validAzure, type AzureConfig } from './voice-online.ts';
 import { buildSfxTrack, sfxTrackPath } from './sfx.ts';
+import { generateImage, imagegenStatus } from './imagegen.ts';
 import { downloadMusic, generateMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
 import { ART_MIME, artExists, artPath, artUrl, downloadArt, saveDrawn } from './art.ts';
 import { checkMany } from './verify.ts';
@@ -849,6 +850,16 @@ const server = createServer(async (req, res) => {
         return json(res, 200, { art: await downloadArt(DATA_DIR, { url: c.url, title: String(c.title ?? '').slice(0, 120), author: String(c.author ?? '').slice(0, 80), license, licenseLabel: String(c.licenseLabel ?? '').slice(0, 30), page: String(c.page ?? '').slice(0, 300) }) });
       } catch (e) {
         return json(res, 409, { error: e instanceof Error ? e.message : 'No pude descargar la imagen' });
+      }
+    }
+    // --- optional local image generation (the person installs the engine; see server/src/imagegen.ts) ---
+    if (url.pathname === '/api/imagegen/status' && req.method === 'GET') return json(res, 200, await imagegenStatus(DATA_DIR));
+    if (url.pathname === '/api/art/generate' && req.method === 'POST') {
+      const b = await readBody(req);
+      try {
+        return json(res, 200, { art: await generateImage(DATA_DIR, String(b.query ?? '').slice(0, 80), b.look === 'paper' ? 'paper' : 'flat') });
+      } catch (e) {
+        return json(res, 409, { error: e instanceof Error ? e.message : 'No pude generar la imagen' });
       }
     }
     if (url.pathname === '/api/art/draw' && req.method === 'POST') {
