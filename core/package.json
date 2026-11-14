@@ -14,6 +14,7 @@
     "./fragments": "./src/fragments.ts",
     "./rhythm": "./src/rhythm.ts",
     "./hookcta": "./src/hookcta.ts",
+    "./loudness": "./src/loudness.ts",
     "./verification": "./src/verification.ts",
     "./style": "./src/style.ts",
     "./motion": "./src/motion.ts",
@@ -22,6 +23,7 @@
     "./music": "./src/music.ts",
     "./broll": "./src/broll.ts",
     "./sfx": "./src/sfx.ts",
+    "./music-synth": "./src/music-synth.ts",
     "./voice-clone": "./src/voice/clone.ts"
   },
   "scripts": {

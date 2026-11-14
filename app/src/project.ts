@@ -38,6 +38,8 @@ export interface Project {
   /** Opening labels at the top, and the final screen with a button (texts the person writes). */
   hook: HookSettings;
   cta: CtaSettings;
+  /** Final videos are brought to -15 LUFS (drafts are never touched). */
+  loudness: { normalize: boolean };
   /** Background music: the chosen track (mp3 kept by the server) and how it is mixed. */
   music: { track: MusicRef | null; mood: string; hint: string; mix: MusicMix };
   /** Sound effects: which sound plays on which event (see core/sfx). Off by default. */
@@ -53,7 +55,7 @@ export interface Project {
     slides?: SlideDraft[] | null;
     thumbTitle: string;
     summary: string;
-    result: { key: string; items: { id: DeliverableId; label: string; status: string; error?: string; files: { name: string; url: string; kind: string }[] }[] } | null;
+    result: { key: string; items: { id: DeliverableId; label: string; status: string; error?: string; note?: string; files: { name: string; url: string; kind: string }[] }[] } | null;
   };
 }
 
@@ -79,6 +81,7 @@ export const EMPTY_PROJECT: Project = {
   beats: {},
   hook: DEFAULT_HOOK,
   cta: DEFAULT_CTA,
+  loudness: { normalize: true },
   music: { track: null, mood: 'documental', hint: '', mix: DEFAULT_MIX },
   sfx: DEFAULT_SFX,
   production: { preset: '', themeIdx: 0, scenes: [], style: DEFAULT_STYLE },
@@ -100,7 +103,7 @@ export const flushProject = async (): Promise<void> => {
 };
 
 /** A saved project (possibly from an older version, or empty) completed with the current defaults. */
-export const hydrate = (saved: Partial<Project>): Project => ({ ...EMPTY_PROJECT, ...saved, fragments: Array.isArray(saved.fragments) ? saved.fragments : [], voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, broll: { ...saved.broll }, beats: { ...saved.beats }, hook: { ...DEFAULT_HOOK, ...saved.hook }, cta: { ...DEFAULT_CTA, ...saved.cta }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
+export const hydrate = (saved: Partial<Project>): Project => ({ ...EMPTY_PROJECT, ...saved, fragments: Array.isArray(saved.fragments) ? saved.fragments : [], voice: { ...EMPTY_PROJECT.voice, ...saved.voice }, verification: { ...saved.verification }, art: { ...saved.art }, broll: { ...saved.broll }, beats: { ...saved.beats }, hook: { ...DEFAULT_HOOK, ...saved.hook }, cta: { ...DEFAULT_CTA, ...saved.cta }, loudness: { normalize: saved.loudness?.normalize !== false }, music: { ...EMPTY_PROJECT.music, ...saved.music, mix: { ...DEFAULT_MIX, ...saved.music?.mix } }, sfx: normalizeSfx(saved.sfx), production: { ...EMPTY_PROJECT.production, ...saved.production }, renders: { ...EMPTY_PROJECT.renders, ...saved.renders }, publish: { ...EMPTY_PROJECT.publish, ...saved.publish }, deliverables: { ...EMPTY_PROJECT.deliverables, ...saved.deliverables } });
 
 /** State of one project saved (encrypted) in the vault, debounced. Changing `projectId` loads another project. */
 export function useProject(projectId: string) {

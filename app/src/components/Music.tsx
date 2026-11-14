@@ -68,6 +68,20 @@ export function Music({ project, set }: P) {
     if (ref) put({ track: ref });
   };
 
+  const generate = async () => {
+    setErr('');
+    setBusy('gen');
+    try {
+      const res = await fetch('/api/music/generate', { method: 'POST', headers: { 'content-type': 'application/json', 'x-session': getToken() }, body: JSON.stringify({ mood: m.mood }) });
+      const j = (await res.json()) as { music?: MusicRef; error?: string };
+      if (!res.ok || !j.music) throw new Error(j.error ?? 'No pude generar la música');
+      put({ track: j.music });
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setBusy('');
+  };
+
   const upload = async (f: File | undefined) => {
     if (!f) return;
     setErr('');
@@ -110,6 +124,7 @@ export function Music({ project, set }: P) {
         </label>
         <button className={secondary} disabled={!!busy} onClick={() => void suggest()}>{busy === 'mood' ? 'Pensando…' : 'Sugerir con IA'}</button>
         <button className={secondary} disabled={!!busy} onClick={() => void search()}>{busy === 'search' ? 'Buscando…' : 'Buscar 3 pistas'}</button>
+        <button className={secondary} disabled={!!busy} onClick={() => void generate()} title="Compone una pista lo-fi en tu PC: sin licencia ni crédito">{busy === 'gen' ? 'Componiendo…' : 'Generar música (sin licencias)'}</button>
       </div>
       {msg && <p className="text-xs text-slate-300" role="status">{msg}</p>}
 

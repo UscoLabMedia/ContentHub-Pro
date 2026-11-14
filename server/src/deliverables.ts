@@ -6,7 +6,7 @@ import {
   DELIVERABLES, buildCarouselCaption, buildDescription, chaptersFrom, runFfmpeg, scenesToSrt, slug, stripMarkup, validateShorts, validateSlides, zipStore,
   type DeliverableId, type Scene, type ShortRange, type SlideSpec, type VideoSpec,
 } from '@chp/core';
-import { narrateScenes, renderCarousel, renderStill, startRender, waitForRender, type Narration, type RenderExtras } from './render.ts';
+import { narrateScenes, renderCarousel, renderStatus, renderStill, startRender, waitForRender, type Narration, type RenderExtras } from './render.ts';
 
 export interface PackageRequest {
   items: DeliverableId[];
@@ -45,6 +45,8 @@ export interface PackageItem {
   status: 'pending' | 'working' | 'done' | 'error';
   progress: number;
   error?: string;
+  /** E.g. what was done about the volume. */
+  note?: string;
   files: PackageFile[];
 }
 export interface PackageJob {
@@ -120,6 +122,8 @@ async function execute(job: PackageJob, req: PackageRequest, o: { dataDir: strin
   const video = async (item: PackageItem, spec: VideoSpec, name: string, share: [number, number]) => {
     const r = await startRender(spec, 'final', o.dataDir, o.root, o.narration, o.extras);
     await waitForRender(o.dataDir, r.id, (p) => (item.progress = Math.round(share[0] + ((share[1] - share[0]) * p) / 100)));
+    const note = renderStatus(o.dataDir, r.id)?.note;
+    if (note) item.note = item.note ? `${item.note} · ${note}` : note;
     item.files.push({ name, url: `/api/render/${r.id}/file?dl=1&name=${name}`, kind: 'video' });
   };
 
