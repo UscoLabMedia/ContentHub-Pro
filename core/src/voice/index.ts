@@ -11,6 +11,7 @@ import { ensurePiper, ensureVoice, findPiper, synthPiper, voiceInstalled, type R
 import { listSapi, synthSapi } from './sapi.ts';
 import { joinWav, wavInfo } from './wav.ts';
 import { parseMarkup, stripMarkup, hasMarkup, type SpeechPiece, type SpokenWord } from './markup.ts';
+import { cloneVoiceId, isCloneVoiceId, profileIdOf, type CloneEngine } from './clone.ts';
 import { DEFAULT_TUNING, isDefaultTuning, normalizeTuning, type OnlineVoice, type VoiceTuning } from './online.ts';
 import { runFfmpeg } from '../sources/whisper.ts';
 
@@ -18,12 +19,13 @@ export * from './catalog.ts';
 export * from './wav.ts';
 export * from './markup.ts';
 export * from './online.ts';
+export * from './clone.ts';
 export { piperAssetUrl } from './piper.ts';
 
 export interface VoiceInfo {
   id: string;
   label: string;
-  engine: 'piper' | 'sapi' | 'edge' | 'azure' | 'kokoro';
+  engine: 'piper' | 'sapi' | 'edge' | 'azure' | 'kokoro' | 'clone';
   lang: string;
   quality: 'low' | 'medium' | 'high' | 'system' | 'neural';
   /** Online voices: Azure speaking styles the voice supports. */
@@ -59,7 +61,7 @@ const ONLINE_LABEL = { edge: 'Edge · en línea, gratis', azure: 'Azure · en l�
 
 export class Tts {
   /** `piperBin` lets you use your own Piper build (also how tests inject a fake engine). `online` are the online services. */
-  constructor(private dataDir: string, private piperBin?: string, private online: () => OnlineProvider[] = () => [], private local?: LocalEngine) {}
+  constructor(private dataDir: string, private piperBin?: string, private online: () => OnlineProvider[] = () => [], private local?: LocalEngine, private clones?: CloneEngine) {}
 
   cacheFile(hash: string): string {
     return join(this.dataDir, 'tts-cache', `${hash}.wav`);
@@ -78,6 +80,7 @@ export class Tts {
     return [
       ...online,
       ...(this.local?.voices() ?? []),
+      ...(this.clones?.voices() ?? []),
       ...sapi.map<VoiceInfo>((v) => ({ id: `sapi:${v.name}`, label: `${v.name} · Windows (sin descarga)`, engine: 'sapi', lang: v.culture, quality: 'system', installed: true })),
       ...piper,
     ];
@@ -88,14 +91,29 @@ export class Tts {
     const raw = text.replace(/\s+/g, ' ').trim();
     if (!stripMarkup(raw)) throw new Error('No hay texto para narrar');
     const t = normalizeTuning(tuningIn);
+    const prof = isCloneVoiceId(voiceId) ? this.clones?.profile(profileIdOf(voiceId)) : undefined;
+    if (isCloneVoiceId(voiceId) && !prof) throw new Error('Esa voz clonada ya no existe: elige otra voz');
     // Same cache key as before for plain text at default tuning, so narration made earlier is still reused.
-    const key = !hasMarkup(raw) && t.pitch === 0 && t.style === '' ? `${voiceId}|${t.speed}|${raw}` : `${voiceId}|${t.speed}|${t.pitch}|${t.style}|${raw}`;
+    const idPart = prof ? `${voiceId}~${prof.base}~${prof.engine}` : voiceId; // another base voice or engine is another clip
+    const key = !hasMarkup(raw) && t.pitch === 0 && t.style === '' ? `${idPart}|${t.speed}|${raw}` : `${idPart}|${t.speed}|${t.pitch}|${t.style}|${raw}`;
     const hash = createHash('sha1').update(key).digest('hex');
     const file = this.cacheFile(hash);
     const meta = file.replace(/\.wav$/, '.json');
     if (!existsSync(file)) {
       const pieces = parseMarkup(raw);
       await mkdir(join(this.dataDir, 'tts-cache'), { recursive: true });
+      if (prof) {
+        // Cloned voice: the base voice says it (cached as usual), then the converter changes the timbre. Timing is kept, so word times carry over.
+        if (isCloneVoiceId(prof.base)) throw new Error('La voz base de una voz clonada no puede ser otra voz clonada');
+        const base = await this.synth(prof.base, raw, t, (p, l) => report(Math.round(p * 0.6), l));
+        report(65, 'Aplicando tu voz');
+        await this.clones!.convert(profileIdOf(voiceId), base.file, file, (p, l) => report(65 + Math.round(p * 0.3), l));
+        if (base.words?.length) await writeFile(meta, JSON.stringify(base.words));
+        const dur = wavInfo(await readFile(file)).durationSec;
+        if (!(dur > 0.2)) throw new Error('La voz clonada salió vacía');
+        report(100, 'Listo');
+        return { file, hash, durationSec: dur, words: base.words };
+      }
       const simple = pieces.length === 1 && !!pieces[0]!.text && !pieces[0]!.emphasis && !(pieces[0]!.pauseAfterSec > 0) && t.pitch === 0;
       if (simple && !/^(edge|azure):/.test(voiceId)) {
         await this.localClip(voiceId, pieces[0]!.text, t.speed, file, report); // plain text on a local voice: one direct call
@@ -181,4 +199,4 @@ export class Tts {
   }
 }
 
-export { DEFAULT_TUNING, isDefaultTuning };
+export { DEFAULT_TUNING, isDefaultTuning, cloneVoiceId };

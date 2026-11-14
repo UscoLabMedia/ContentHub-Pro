@@ -16,7 +16,8 @@
     "./subtitles": "./src/subtitles.ts",
     "./music": "./src/music.ts",
     "./broll": "./src/broll.ts",
-    "./sfx": "./src/sfx.ts"
+    "./sfx": "./src/sfx.ts",
+    "./voice-clone": "./src/voice/clone.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

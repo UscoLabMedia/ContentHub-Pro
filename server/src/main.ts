@@ -10,7 +10,7 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, type LlmClient, type Quality, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
@@ -19,7 +19,9 @@ import { runSelfTest, type CheckResult } from './selftest.ts';
 import { freeResearchScenes, researchScenes } from './research.ts';
 import { analyzeReference } from './reference.ts';
 import { brollExists, brollPath, brollUrl, downloadBroll } from './broll.ts';
+import { validateConsent } from '@chp/core';
 import { KokoroEngine } from './kokoro.ts';
+import { ProfileError, VoiceCloneEngine, VoiceProfiles } from './voiceclone.ts';
 import { azureProvider, edgeProvider, fakeEdgeProvider, validAzure, type AzureConfig } from './voice-online.ts';
 import { buildSfxTrack, sfxTrackPath } from './sfx.ts';
 import { downloadMusic, musicExists, musicPath, musicUrl, saveOwnMusic } from './music.ts';
@@ -47,7 +49,9 @@ const onlineProviders = (): OnlineProvider[] => {
   return [edgeSvc, ...(a ? [azureProvider(a, process.env.CHP_AZURE_BASE)] : [])];
 };
 const kokoro = new KokoroEngine(DATA_DIR, ROOT);
-const tts = new Tts(DATA_DIR, process.env.CHP_PIPER_BIN, onlineProviders, kokoro);
+const voiceProfiles = new VoiceProfiles(DATA_DIR, () => session?.vault ?? null);
+const cloneEngine = new VoiceCloneEngine(DATA_DIR, ROOT, voiceProfiles, undefined, process.env.CHP_CLONE_WORKER); // CHP_CLONE_WORKER: a stand-in worker for tests
+const tts = new Tts(DATA_DIR, process.env.CHP_PIPER_BIN, onlineProviders, kokoro, cloneEngine);
 let radarCache: { at: number; data: Awaited<ReturnType<typeof fetchRadar>> } | null = null;
 
 interface VoiceJob {
@@ -433,6 +437,42 @@ const server = createServer(async (req, res) => {
         .catch((e: unknown) => Object.assign(job, { status: 'error', error: e instanceof Error ? e.message : String(e) }));
       return json(res, 200, job);
     }
+    // cloned voices: a sample + consent, applied on top of any base voice
+    if (url.pathname === '/api/voice/clones' && req.method === 'GET') {
+      return json(res, 200, { profiles: voiceProfiles.list(), engines: CLONE_ENGINES, tips: SAMPLE_TIPS, limits: { minSec: SAMPLE_MIN_SEC, maxSec: SAMPLE_MAX_SEC }, installed: cloneEngine.modelsReady('openvoice') });
+    }
+    if (url.pathname === '/api/voice/clones' && req.method === 'POST') {
+      if (Number(req.headers['content-length'] ?? 0) > 80 * 1024 * 1024) return json(res, 413, { error: 'El archivo es demasiado grande (máx. 80 MB)' });
+      const q = (k: string, n: number) => String(url.searchParams.get(k) ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
+      const consent = { kind: q('kind', 12) as 'own' | 'permission', person: q('person', 80), purpose: q('purpose', 200), confirmed: url.searchParams.get('confirmed') === '1' };
+      const early = validateConsent(consent); // before reading a single byte of audio
+      if (early) return json(res, 400, { error: early });
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const c of req) {
+        size += (c as Buffer).length;
+        if (size > 80 * 1024 * 1024) return json(res, 413, { error: 'El archivo es demasiado grande (máx. 80 MB)' });
+        chunks.push(c as Buffer);
+      }
+      try {
+        return json(res, 200, { profile: await voiceProfiles.create({ name: q('name', 40), base: q('base', 90), engine: q('engine', 20), consent, bytes: Buffer.concat(chunks) }) });
+      } catch (e) {
+        return json(res, e instanceof ProfileError ? 400 : 500, { error: e instanceof Error ? e.message : 'No pude crear la voz' });
+      }
+    }
+    const cm = url.pathname.match(/^\/api\/voice\/clones\/([a-f0-9]{16})$/);
+    if (cm && req.method === 'PATCH') {
+      try {
+        return json(res, 200, { profile: await voiceProfiles.update(cm[1]!, await readBody(req)) });
+      } catch (e) {
+        return json(res, e instanceof ProfileError ? 400 : 500, { error: e instanceof Error ? e.message : 'No pude cambiar la voz' });
+      }
+    }
+    if (cm && req.method === 'DELETE') {
+      await voiceProfiles.remove(cm[1]!);
+      return json(res, 200, { ok: true });
+    }
+
     // online voices: Edge needs nothing; Azure uses the person's own key (write-only, stored encrypted)
     if (url.pathname === '/api/voice/online' && req.method === 'GET') {
       const a = azureConfig();
@@ -759,6 +799,10 @@ const server = createServer(async (req, res) => {
       request.sources = [...request.sources, ...credits.sources.map((x) => ({ source: x.title, url: x.url }))];
       if (credits.calcs.length) request.extra = [...(request.extra ?? []), 'Cálculos propios:', ...credits.calcs.map((c) => `- ${c}`)];
       if (credits.images.length) request.extra = [...(request.extra ?? []), 'Imágenes:', ...credits.images.map((c) => `- ${c}`)];
+      if (voice && isCloneVoiceId(String(voice.id))) {
+        const prof = voiceProfiles.get(profileIdOf(String(voice.id)));
+        if (prof) request.extra = [...(request.extra ?? []), syntheticVoiceNotice(prof)];
+      }
       if (credits.music.length) request.extra = [...(request.extra ?? []), 'Música:', ...credits.music.map((c) => `- ${c}`)];
       if (credits.video.length) request.extra = [...(request.extra ?? []), 'Video:', ...credits.video.map((c) => `- ${c}`)];
       try {
