@@ -10,7 +10,7 @@ import { basename, extname, join, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  Gateway, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
+  Gateway, STEP_SCOPES, stepContext, Tts, Vault, VideoSpec, claudeCodeStatus, claudeWorkDir, creditCardText, creditsFrom, gate, CLONE_ENGINES, SAMPLE_TIPS, SAMPLE_MAX_SEC, SAMPLE_MIN_SEC, isCloneVoiceId, profileIdOf, syntheticVoiceNotice, normalizeTuning, type OnlineProvider, brollCredits, searchBroll, PROVIDER_LABEL, PRESETS, type BrollCandidate, type BrollRef, type BrollKeys, normalizeSfx, mixSfx, sfxEvents, synthSfx, toWav16, isSfxId, isAmbientId, DEFAULT_STYLE, musicCredits, musicQuery, normalizeMix, searchMusic, isMood, MOODS, type MusicMix, type MusicRef, textKey, artCredits, artQuery, licenseOf, searchArt, sanitizeSvg, type ArtRef, type SceneCheck, toReviewLines, usableBlock, type ReviewBlock, createClaudeCodeClient, createLlmClient, digestToPrompt, fetchRadar, ingestFile, radarLines,
   OUTPUT_SCHEMAS, slug, validateOriginal, textForRange, segmentsIn, matchBeatWords, normalizeHook, normalizeCta, ctaScene, type SceneOriginal, archiveProject, cleanName, createProject, currentData, currentId, deleteProject, duplicateProject, exportEnvelope, getProjectData, importProject, isProjectId, listProjects, openProject, renameProject, saveProjectData, type FileRefs, carouselGate, slidesFromScenes, toSlideSpecs, validateSlides, type LlmClient, type Quality, type SlideDraft, type SlideSpec, type Task,
 } from '@chp/core';
 import { audioPath, classify, dropAudio, excerptFor, ideasFor, processSource, toView, type SourceRecord } from './sources.ts';
@@ -862,6 +862,24 @@ const server = createServer(async (req, res) => {
       const svg = sanitizeSvg(r.data.svg);
       if (!svg) return json(res, 422, { error: 'El dibujo no fue válido; inténtalo de nuevo' });
       return json(res, 200, { art: await saveDrawn(DATA_DIR, svg, desc) });
+    }
+
+    // --- step assistant: answers only about the current step and proposes edits (applied by the app after the person agrees) ---
+    if (url.pathname === '/api/assistant' && req.method === 'POST') {
+      const b = await readBody(req);
+      const step = Number(b.step);
+      const message = String(b.message ?? '').replace(/\s+/g, ' ').trim().slice(0, 600);
+      const scope = STEP_SCOPES[step];
+      if (!scope) return json(res, 400, { error: 'Paso no válido' });
+      if (!message) return json(res, 400, { error: 'Escribe qué quieres ajustar' });
+      if (!s.gateway) return json(res, 409, { error: 'Elige un motor de IA en Ajustes' });
+      try {
+        const task = step === 5 ? 'stepAssistScript' : 'stepAssist';
+        const r = await s.gateway.run(task, `PASO: ${scope.topic}\nPEDIDO: ${message}\nDATOS: ${stepContext(currentData(s.vault), step)}`);
+        return json(res, 200, { onTopic: r.data.onTopic, reply: r.data.reply, ops: r.data.onTopic ? r.data.ops : [] });
+      } catch (e) {
+        return json(res, 502, { error: e instanceof Error ? e.message : 'La IA no respondió' });
+      }
     }
 
     // --- beats: key words with a zoom hit and a click (one small AI query for the whole script) ---

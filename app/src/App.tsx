@@ -3,6 +3,7 @@ import { api, type EngineView } from './api.ts';
 import { STEPS, TOTAL } from './steps.ts';
 import { flushProject, useProject } from './project.ts';
 import { Projects, loadProjects, type ProjectList } from './components/Projects.tsx';
+import { AssistantBar } from './components/AssistantBar.tsx';
 import { EditCode } from './components/EditCode.tsx';
 import { Settings } from './components/Settings.tsx';
 import { StepDeliverables } from './components/Deliverables.tsx';
@@ -82,6 +83,7 @@ function Workspace({ projectId, onHome, onSwitch }: { projectId: string; onHome:
           {Current ? <Current project={project} set={setProject} /> : <p className="text-slate-400">Este paso se construye en la siguiente etapa.</p>}
         </main>
       </div>
+      <AssistantBar key={step} step={step} project={project} set={setProject} />
       <footer className="flex items-center justify-between border-t border-slate-800 bg-slate-900 px-4 py-3">
         <button disabled={step === 1} onClick={() => setStep(step - 1)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm disabled:opacity-30">Anterior</button>
         <span className="text-xs text-slate-400">Paso {step} de {TOTAL}</span>
