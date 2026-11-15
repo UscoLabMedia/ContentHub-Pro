@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { imagePrompt, normalizeImagegen, pickEngine, sdArgs } from '../src/imagegen.ts';
+import { imagePrompt, normalizeImagegen, parseSeed, pickEngine, sdArgs } from '../src/imagegen.ts';
 
 describe('imagegen helpers', () => {
   it('needs both an engine and a model', () => {
@@ -20,5 +20,18 @@ describe('imagegen helpers', () => {
     const a = sdArgs({ model: 'm.gguf', prompt: p, out: 'o.png', seed: -1, settings: normalizeImagegen(null) });
     expect(a).toContain('--steps');
     expect(a[a.indexOf('-s') + 1]).toBe('4294967295');
+    expect(a).not.toContain('-i');
+  });
+  it('adds the reference picture only when there is one, with a safe strength', () => {
+    const base = { model: 'm.gguf', prompt: 'p', out: 'o.png', seed: 1, settings: normalizeImagegen(null) };
+    const a = sdArgs({ ...base, init: 'ref.png', strength: 5 });
+    expect(a[a.indexOf('-i') + 1]).toBe('ref.png');
+    expect(a[a.indexOf('--strength') + 1]).toBe('1');
+    expect(sdArgs({ ...base, init: 'ref.png' })[sdArgs({ ...base, init: 'ref.png' }).indexOf('--strength') + 1]).toBe('0.6');
+  });
+  it('reads the seed only when it is a whole number that fits', () => {
+    expect(parseSeed('123')).toBe(123);
+    expect(parseSeed(0)).toBe(0);
+    for (const bad of ['', '  ', 'abc', -1, 1.5, 2 ** 32, null, undefined]) expect(parseSeed(bad)).toBeNull();
   });
 });

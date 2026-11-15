@@ -4,10 +4,10 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { imagePrompt, normalizeImagegen, pickEngine, sdArgs, type ArtRef, type ImageLook, type ImagegenSettings } from '@chp/core';
+import { imagePrompt, normalizeImagegen, normalizeStrength, pickEngine, sdArgs, type ArtRef, type ImageLook, type ImagegenSettings } from '@chp/core';
 import { saveGenerated, sniffImage } from './art.ts';
 
 export const imagegenDir = (dataDir: string): string => join(dataDir, 'imagegen');
@@ -35,8 +35,17 @@ export async function imagegenStatus(dataDir: string): Promise<ImagegenStatus> {
 
 let busy = false;
 
+export interface GenOptions {
+  /** Seed chosen by the person; without it the scene wording picks one (same wording = same image). */
+  seed?: number | null;
+  /** Reference picture (png/jpg bytes) for img2img, and how far the result may move away from it (0.1–1). */
+  ref?: Buffer | null;
+  strength?: number;
+}
+export const MAX_REF_BYTES = 8 * 1024 * 1024;
+
 /** One image for a scene. Rejects with a readable message when the engine is missing, busy, too slow or produced nothing usable. */
-export async function generateImage(dataDir: string, query: string, look: ImageLook): Promise<ArtRef> {
+export async function generateImage(dataDir: string, query: string, look: ImageLook, opts: GenOptions = {}): Promise<ArtRef> {
   const st = await imagegenStatus(dataDir);
   if (!st.installed || !st.bin || !st.model) throw new Error('La generación local no está instalada (mira las instrucciones en el panel)');
   if (!query.trim()) throw new Error('Falta qué generar');
@@ -46,8 +55,15 @@ export async function generateImage(dataDir: string, query: string, look: ImageL
   try {
     const prompt = imagePrompt(query, look);
     const out = join(work, 'out.png');
-    const seed = createHash('sha1').update(prompt).digest().readUInt32BE(0); // same scene wording = same image
-    const args = sdArgs({ model: join(st.dir, st.model), prompt, out, seed, settings: st.settings });
+    const seed = opts.seed ?? createHash('sha1').update(prompt).digest().readUInt32BE(0); // same scene wording = same image
+    let init: string | undefined;
+    if (opts.ref) {
+      const ext = sniffImage(opts.ref);
+      if (opts.ref.length > MAX_REF_BYTES || (ext !== 'png' && ext !== 'jpg')) throw new Error('La imagen de referencia debe ser PNG o JPG de menos de 8 MB');
+      init = join(work, `ref.${ext}`);
+      await writeFile(init, opts.ref);
+    }
+    const args = sdArgs({ model: join(st.dir, st.model), prompt, out, seed, settings: st.settings, init, strength: normalizeStrength(opts.strength) });
     const log = await new Promise<string>((resolve, reject) => {
       const p = spawn(join(st.dir, st.bin!), args, { cwd: work, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
       let tail = '';
